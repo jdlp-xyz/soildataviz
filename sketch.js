@@ -56,3 +56,31 @@ function draw(){
 function windowResized() {
     resizeCanvas(windowWidth, windowHeight);
   }
+
+  let selected_state = 0;
+
+  function mouseReleased() {
+    console.log("clicked");
+
+    // let i = parseInt(random(0, viz.stage.viz_particles.length));
+
+    // viz.stage.viz_particles[i].set_state('red');
+    // viz.stage.viz_particles[i].state.set_cascade();
+
+    let possible_states = ['local','free'];
+    
+    // Toggle the state
+    
+    console.log("changing stage state to " + possible_states[selected_state]);
+    viz.stage.set_stage_state(possible_states[selected_state]);
+    
+    // move the selected state one step
+    if(selected_state == 0){
+      selected_state = 1;
+    }else{
+      selected_state = 0;
+    }
+
+  }
+
+  

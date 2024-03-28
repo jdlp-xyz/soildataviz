@@ -638,6 +638,10 @@ class ConstituentsNode extends DBNode {
 
     }
 
+    get_label(){
+        return this.get_full_name();
+    }
+
     // It returns an array of years based on the membership years
     get_membership_as_years_array(){
 
@@ -745,6 +749,10 @@ class ExhibitionNode extends DBNode {
         this.artists_nodes = [];
         this.curator_node = [];
 
+    }
+
+    get_label(){
+        return this.exhibition_title;
     }
 
     cross_reference_nodes() {
@@ -866,6 +874,11 @@ class YearsNode extends DBNode {
 
     }
 
+    get_label(){
+
+        return this.year.toString();
+    }
+
     cross_reference_nodes(){
 
         // exhibitions
@@ -928,6 +941,11 @@ class MembershipNode extends DBNode {
         this.constituents_record_ids = constituents_record_ids;
         this.constituents_nodes = [] // objects reference
 
+    }
+
+    get_label(){
+        let label = this.year.semantic_id.toString()+" Membership";
+        return label;
     }
 
     cross_reference_nodes(){
