@@ -20,10 +20,21 @@ class Stage {
         this.context = context;
         this.localdb = localdb;
 
+        // Local network
         this.staged_nodes = {
             'focused': null,
             'neighbors': [],
             'secondary': []
+        }
+
+        // Placement areas for the local network
+        this.placement_areas = {
+            'areas': {
+                'focused_area': new Circle(innerWidth/2, innerHeight/2, 200, 200), // TODO: Width and height values should be dynamically calculated
+                'neighbors_area': new Circle(innerWidth/2, innerHeight/2, 400, 400),
+                'secondary_area': new Circle(innerWidth/2, innerHeight/2, 600, 600)
+            },
+            'targets': []
         }
        
 
@@ -40,6 +51,7 @@ class Stage {
         this.state = new StateStageFree(this);
         this.old_state = null;
         console.log("state:",this.state)
+
 
         // Test area
 
@@ -123,11 +135,14 @@ class Stage {
         // Update quadtree
         this.quadtree.clear();
         // For each particle create a point and insert it in the quadtree
-        for(let i = 0; i < this.viz_particles.length; i++){
+        if(this.viz_particles.length > 0){
+            for(let i = 0; i < this.viz_particles.length; i++){
 
-            let point = new Point(this.viz_particles[i].pos.x, this.viz_particles[i].pos.y, this.viz_particles[i]);
-            this.quadtree.insert(point);
-        }
+                let point = new Point(this.viz_particles[i].pos.x, this.viz_particles[i].pos.y, this.viz_particles[i]);
+
+                this.quadtree.insert(point);
+            }
+         }
     }
 
     // This method will start a cascading to a new state of the particles. It ment to be called once.
@@ -224,7 +239,7 @@ class Stage {
                 this.state = new StateStageFree(this)
                 break;
             case 'local':
-                this.state = new StateStageLocal(this, "recU2fzo1HzuU5t3q")
+                this.state = new StateStageLocal(this, "recZKD1DclIatreZC") // for testing only
                 console.log("changed state to:", this.state);
                 break;
             default:
@@ -310,14 +325,16 @@ class StateStageFree extends StageState {
             let not_free_particles = this.context.viz_particles.filter(p => p.state.get_label() != "free");
 
             // unlock them
-            locked_particles.forEach(p => p.state.unlock_state());
+            if(locked_particles.length > 0){
+            locked_particles.forEach(p => p.state.unlock_state());}
 
-            // Clean the user data for the not free particles
-            not_free_particles.forEach(p => p.clean_user_data());
-
-            // turn them into free state
-            // TODO: this should be cascading
-            not_free_particles.forEach(p => p.set_state("free"));
+           
+            if(not_free_particles.length > 0){
+                // Clean the user data for the not free particles
+                not_free_particles.forEach(p => p.clean_user_data());
+                // turn them into free state
+                not_free_particles.forEach(p => p.set_state("free"));
+            }
 
             // Declare that particles are free
             this.particles_are_free = true;
@@ -338,10 +355,11 @@ class StateStageLocal extends StageState {
 
         this.label = "local";
 
+        this.local_network_particles = []; // references for the local network particles
         // Build the local network
+        this.animating_particle = null;
         this.build_local_particle_network(this.focused_record_id);
 
-        
     
     }
 
@@ -414,22 +432,150 @@ class StateStageLocal extends StageState {
         // Asign the db nodes to the selected particles
         // Asign the focus particle
         selected_particles[0].userData.db_node = this.context.staged_nodes['focused'];
+        // tag the particle
+        selected_particles[0].userData.place_in_stage = "focused";
+        // reference the particle in the state's array
+        this.local_network_particles.push(selected_particles[0]);
+
+
         // Asign the neighbors
         for(let i = 0; i < this.context.staged_nodes['neighbors'].length; i++){
             selected_particles[i+1].userData.db_node = this.context.staged_nodes['neighbors'][i];
+            // tag
+            selected_particles[i+1].userData.place_in_stage = "neighbors";
+            this.local_network_particles.push(selected_particles[i+1]);
         }
         // Asign the secondary neighbors
         for(let i = 0; i < this.context.staged_nodes['secondary'].length; i++){
             selected_particles[i+1+this.context.staged_nodes['neighbors'].length].userData.db_node = this.context.staged_nodes['secondary'][i];
+            // tag
+            selected_particles[i+1+this.context.staged_nodes['neighbors'].length].userData.place_in_stage = "secondary";
+            this.local_network_particles.push(selected_particles[i+1+this.context.staged_nodes['neighbors'].length]);
         }
 
         // Asign a label to the selected particles from the db node
         selected_particles.forEach(particle => particle.label = particle.userData.db_node.get_label());
+        selected_particles[0].color = [255,0,0];
+        
+        // set local targets for the selected particles
+        selected_particles.forEach(particle => this.set_particle_initial_target(particle));
 
-        console.table(selected_particles);
+        // set focused particle flag to move
+        selected_particles[0].state.agent_state = 'free';
+
+        
+    }
+
+    // Set the arrive target for an individual particle, depending on its state and db node.
+    set_particle_initial_target(selected_particle){
+
+        // If the particle doesn't have a db node, return
+        if(!selected_particle.userData.db_node && selected_particle.state.get_label() != "local"){return;}
+
+        // Set the target based on the place in stage flag
+        switch(selected_particle.userData.place_in_stage){
+            case "focused":
+                // center
+                selected_particle.userData.initial_target = createVector(innerWidth/2, innerHeight/2);
+                break;
+            case "neighbors":
+                // Filter the viz particle with userData.place_in_stage == "focused"
+                let focused_particle = this.context.viz_particles.filter(particle => particle.userData.place_in_stage == "focused")[0];
+                // Set the target
+                selected_particle.userData.initial_target = focused_particle.pos;
+                break;
+
+            case "secondary":
+
+                // For the secondary, the target may change on the amount of present neighbours. If there's one present neighbor, the target will be the neighbor. If there's more than one present neighbor, it sould calculate the middle point between the neighbors.
+                
+                // Get the present neighbors
+                let present_neighbours = this.get_present_neighbors(selected_particle);
+
+                // If there's only one present neighbor, set the target to the neighbor
+                if(present_neighbours.length == 1){
+                    selected_particle.userData.initial_target = present_neighbours[0].pos;
+                } else {
+
+                    // If there's more than one present neighbor, set the target to the middle point between the neighbors
+                    let sum_x = 0, sum_y = 0;
+                    present_neighbours.forEach(particle => {
+                        sum_x += particle.pos.x;
+                        sum_y += particle.pos.y;
+
+                    })
+                    let middle_point = createVector(sum_x/present_neighbours.length, sum_y/present_neighbours.length);
+                    selected_particle.userData.initial_target = middle_point;
+                }
+
+                break;
+        }
+
+
+ 
+    }
+    
+    get_present_neighbors(particle){
+        
+        // Array with the present neighbors to return
+        let present_neighbours = [];	
+
+        // Do the particle has a db node?
+        if(!particle.userData.db_node){return [];}
+
+        // Get the neighbors of the dbnode
+        let db_node_neighbors = particle.userData.db_node.get_neighbours();
+
+        // Push to the present neighbours array all the present neigbours in the stage
+
+        // filter the focused particle
+        let focused_particle = this.context.viz_particles.filter(particle => particle.userData.place_in_stage == "focused")[0];
+        // Is the focused particle's db node in the neighbors of the db node?
+        if(db_node_neighbors.includes(focused_particle.userData.db_node)){
+            present_neighbours.push(focused_particle);
+        }
+
+        // filter the neighbors
+        let neigbours = this.context.viz_particles.filter(particle => particle.userData.place_in_stage == "neighbors");
+        // Is the focused particle's db node in the neighbors of the db node?
+        neigbours.forEach(particle => {
+            if(db_node_neighbors.includes(particle.userData.db_node)){
+                present_neighbours.push(particle);
+            }
+        })
+
+        // filter the secondary
+        let secondary = this.context.viz_particles.filter(particle => particle.userData.place_in_stage == "secondary");
+        // Is the focused particle's db node in the neighbors of the db node?
+        secondary.forEach(particle => {
+            if(db_node_neighbors.includes(particle.userData.db_node)){
+                present_neighbours.push(particle);
+            }
+        })
+
+        // Return the present neighbours
+        return present_neighbours;
 
     }
 
+    // Method called by particles to tell stage they're ready for the next particle.
+    ready_for_next_particle(previous_particle){
+        console.log("ready for next particle")
+
+        // Look for the index of the previous particle in this.local_network_particles
+        let index = this.local_network_particles.indexOf(previous_particle);
+
+        // If it's the last particle, return
+        if(index == this.local_network_particles.length - 1){
+            return;
+        } else {
+            // If it's not, set the next particle agent state to free
+            this.local_network_particles[index].state.agent_state = "locked"
+            this.local_network_particles[index + 1].state.agent_state = "free";
+
+        }
+
+    }
 
 
 }
@@ -447,9 +593,13 @@ class VizParticle {
         this.acc = createVector(0,0);
         this.mass = 1;
         this.radius = 10;
-        this.perception = 20;
         this.maxSpeed = 10;
         this.maxForce = 0.4;
+
+        this.perception = 100;
+
+        
+        // Appearance
         this.color = [0,0,0];
 
         // Parent object
@@ -498,12 +648,14 @@ class VizParticle {
 
     show_label(){
 
-        if(this.label != null && this.label != "undefined"){
+         if(this.label != null && this.label != "undefined"){
             push();
                 textAlign(CENTER, TOP);
                 textFont(fontRoboto);
                 text(this.label, this.pos.x, this.pos.y+this.radius*1.5);
             pop();
+
+           
         }
 
     }
@@ -664,6 +816,49 @@ class VizParticle {
 
         if(this.contact_counter > max_contact_limit){ this.state.stop_cascade();}
     }
+
+    //Physics methods
+
+    update_physics() {
+        this.vel.add(this.acc);
+        this.vel.limit(this.maxSpeed);
+        this.pos.add(this.vel);
+        this.acc.set(0, 0);
+    }
+
+
+    applyForce(force) {
+        this.acc.add(force);
+    }
+
+
+    
+
+    arrive(target) {
+        // 2nd argument true enables the arrival behavior
+        let slow_radius = 1;
+        return this.seek(target, true, slow_radius);
+    }
+
+    seek(target, arrival = false, slow_radius) {
+        let force_to_target = p5.Vector.sub(target, this.pos);
+        let desiredSpeed = this.maxSpeed;
+        if (arrival) {
+          let slowRadius = slow_radius;
+          let distance = force_to_target.mag();
+
+          if (distance < slowRadius) {
+            desiredSpeed = map(distance, 0, slowRadius, 0, this.maxSpeed);
+          }
+        }
+        force_to_target.setMag(desiredSpeed);
+        force_to_target.sub(this.vel);
+        force_to_target.limit(this.maxForce);
+        return force_to_target;
+      }
+
+
+
 }
 
 // This should be more general
@@ -739,26 +934,212 @@ class VizParticleStateLocal extends VizParticleState {
         this.color = [0,0,255];
         this.set_label("local");
         this.variation = 0;
+
+        this.external_perception = this.context.perception+100;
+        this.internal_perception  = this.context.perception-20;
+
+        // Agent state
+        this.agent_state = 'waiting' // Can be free, locked or waiting.
+        this.agent_collision = []; // References for colliding agents
     }
 
     update(){
-      //  console.log("calling update from local state");
+      
         this.inject_data();
-       // this.context.random_walk();
+
+        // Move to target
+        this.agent_collision = this.check_collisions_with_agents();
+
         
+        let steering = this.arrive(this.context.userData.initial_target);
+        this.context.applyForce(steering);
+
+
+        // If the maxSpeed is 0, call the next particle
+         if(this.context.maxSpeed < 0.1){
+        //     // Lock the particle
+             this.agent_state = 'locked';
+         }
+
+         this.no_overlap();
+        //     // Check the place of this particle in the network particles
+        //     let network_particles = this.context.context.state.local_network_particles;
+        //     let index = network_particles.indexOf(this.context);
+        //     // If this isn't the last particle, set the next particle agent state to free
+        //     if(index < network_particles.length-1){
+        //         network_particles[index+1].state.agent_state = 'free';
+        //     }
+
+        
+        
+        // Test repel agents
+        //this.repel_agents();
+        
+        this.context.update_physics();
+           
         // Show
         this.context.show_ellipse();
-        //If the context particle has a label, show it
-        if(this.context.label != undefined){
-            this.context.show_label();
-        }
-        
+        this.context.show_label();
+        this.show_agent_debug();
+           
+        // Cascade 
         if(this.cascade == true){
             this.context.ripple_out(10);
             this.context.cascade_state(this.label, 10);}
-        
-        
+
     }
+
+
+    no_overlap(){
+        
+        // only check when agent is locked
+        if(this.agent_state != 'locked'){return;}
+
+        // check for collisions on the internal perception
+        let interal_colliding_agents = this.check_collisions_with_agents(false);
+
+        // for each colliding agent, aplly a repel force
+        for(let i = 0; i < interal_colliding_agents.length; i++){
+            
+            let force = p5.Vector.sub(this.context.pos, interal_colliding_agents[i].userData.pos);
+            this.maxSpeed = 3;
+            this.context.applyForce(force);
+            this.maxSpeed = 0;
+        }
+
+    }
+    
+    
+
+   
+
+    // This method is called from the particles connected with the focused particle. I makes a random point near to the position
+
+
+    show_agent_debug(){
+        //show target
+        push();
+            rect(this.context.userData.initial_target.x, this.context.userData.initial_target.y, 10, 10);
+        pop();
+
+        // show agent_perception
+        push()
+            noFill();
+            stroke(255);
+            ellipse(this.context.pos.x, this.context.pos.y, this.external_perception, this.context.external_perception);
+            stroke(255,0,0);
+            ellipse(this.context.pos.x, this.context.pos.y, this.internal_perception, this.internal_perception);
+        pop()
+
+        // color change
+        switch(this.agent_state){
+            case 'free':
+                this.color = [0,0,255];
+                break;
+            case 'locked':
+                this.color = [60,60,60];
+                break;
+            case 'waiting':
+                this.color = [255,255,255];
+                break;
+        }
+
+        push()
+            text(this.agent_collision.length, this.context.pos.x, this.context.pos.y+30);
+        pop()
+    }
+
+    check_collisions_with_agents(external_perception = true){
+        let perception_ring;
+        if(external_perception == true){
+            perception_ring = this.external_perception;
+        }else {
+            perception_ring = this.internal_perception;}
+        // Query the quadtree points in that boundary to get all collsion results
+        let collision = this.context.get_collision(perception_ring, 'circle');
+        //console.log(collision)
+        // Filter the particles that are in local state
+        collision = collision.filter(particle => particle.userData.state.get_label() == 'local');
+
+        // Sort the collision results from the nearest to the farthest
+        collision.sort((a,b) => {
+            return p5.Vector.dist(this.context.pos, a.userData.pos) - p5.Vector.dist(this.context.pos, b.userData.pos);
+        })
+
+        // Filter the particles whose agent state is locked
+        //collision = collision.filter(particle => particle.userData.state.agent_state == 'locked');
+
+        // Return the results
+        //console.log("collisions", collision.length)
+        return collision;
+
+    }
+
+    arrive(target) {
+        // 2nd argument true enables the arrival behavior
+        let slow_radius = 600;
+        return this.seek(target, true, slow_radius);
+    }
+
+    seek(target, arrival = false, slow_radius) {
+        let force_to_target = p5.Vector.sub(target, this.context.pos);
+        let desiredSpeed = this.context.maxSpeed;
+        if (arrival) {
+          let slowRadius = slow_radius;
+          let distance;
+
+            // If there are colliding agents, distance is the middlepoint of those agents
+            if(this.agent_collision.length > 0){
+                distance = p5.Vector.sub(this.agent_collision[0].userData.pos, this.context.pos).mag();
+                //this.context.label = distance;
+               // this.set_color([255,0,0]);
+            }
+            else {
+                distance = force_to_target.mag();
+            }
+          
+          
+          
+          if (distance < slowRadius) {
+            //desiredSpeed = map(distance, 0, slowRadius, 0, this.context.maxSpeed);
+            this.context.maxSpeed = this.context.maxSpeed - this.context.maxSpeed/6;
+          }
+
+        }
+        force_to_target.setMag(desiredSpeed);
+        force_to_target.sub(this.context.vel);
+        force_to_target.limit(this.context.maxForce);
+        return force_to_target;
+      }
+
+    calculate_collision_middlepoint(){
+        if(this.agent_collision.length > 0){
+
+            let pos_array = this.agent_collision;
+            let totalPuntos = pos_array.length;
+            
+            if (totalPuntos === 0) {
+            // Manejo de caso especial si no hay puntos
+            return null;
+            }
+        
+            // Inicializar sumas
+            var sumaX = 0;
+            var sumaY = 0;
+        
+            // Sumar las coordenadas de todos los puntos
+            for (var i = 0; i < totalPuntos; i++) {
+            sumaX += pos_array[i].userData.pos.x;
+            sumaY += pos_array[i].userData.pos.y;
+            }
+        
+            // Calcular el punto medio
+            var puntoMedioX = sumaX / totalPuntos;
+            var puntoMedioY = sumaY / totalPuntos;
+        
+            //return { x: puntoMedioX, y: puntoMedioY };
+            return createVector(puntoMedioX,puntoMedioY);
+    }}
 
 
 }
@@ -783,3 +1164,49 @@ class VizParticleStateFree extends VizParticleState {
             this.context.cascade_state(this.label, 10);}
     }
 }
+
+// VizTarget
+// viz target are aides and constraints for the composition of particles
+class VizTarget{
+    constructor(host, guest){
+
+        // Defining the particles
+        this.host_particle = host;
+        this.guest_particle = guest;
+        
+        // Position
+        this.host_particle_pos = createVector(this.host_particle.pos.x, this.host_particle.pos.y);
+
+
+        // Defining a random point near to the position of the host.
+        // Defining a range for the random point.
+        
+        //
+        this.pos = this.create_random_point();
+
+
+        //this.vel = createVector(0,0);
+        //this.acc = createVector(0,0);
+        //this.radius = 10;
+        
+    
+    }
+
+    update(){
+        
+    }
+
+    // Creates a random point near to the position
+    create_random_point(){
+        let random_range = 150;
+       let random_point = createVector(random(this.host_particle_pos.x-random_range, this.host_particle_pos.x+random_range), random(this.host_particle_pos.y-random_range, this.host_particle_pos.y+random_range));
+       return random_point;
+    }
+
+    // show graphical debug iformation
+    show_debug(){
+        
+    }
+
+
+    }

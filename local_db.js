@@ -114,7 +114,7 @@ class LocalDB {
                         
                         localdata_exhibitions[i].semantic_id,
                         localdata_exhibitions[i].record_id,
-                        localdata_exhibitions[i].title,
+                        localdata_exhibitions[i].exhibition_title,
                         localdata_exhibitions[i].year_record_id,
                         localdata_exhibitions[i].artist_record_ids,
                         // TODO Integrate curators in a next iteration.

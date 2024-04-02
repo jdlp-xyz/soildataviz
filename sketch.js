@@ -6,6 +6,15 @@ let debug = true;
 // Create visualization
 let viz;
 
+// debug
+let center_point;
+
+// color controls
+//let color_controls;
+
+//canvas background color
+let bkg_color;
+
 // Create a local object db
 let localdb;
 // create variables to store the local data that will be loaded.
@@ -41,9 +50,18 @@ function setup(){
     // Secuence of functions to initialize the local database before drawing the network.
     // The last method builds the visualization, after the local database is ready.
 
+    // Dat.gui controls
+    //color_controls = new dat.GUI();
+	  //color_controls.add(bkg_color, 'r', 0, 255);
+
 }
 
 function draw(){
+
+
+  
+    // define center point for testing.
+    center_point = createVector(width/2, height/2);
 
     background(150)
     if(localdb.is_ready){
