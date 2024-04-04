@@ -57,7 +57,7 @@ function setup(){
 }
 
 function draw(){
-
+    noSmooth();
 
   
     // define center point for testing.
