@@ -155,7 +155,7 @@ class Stage {
         this.cascade_target_state_string = target_state_string;
 
         //bug fix
-        console.log("label:",this.state)
+        //console.log("label:",this.state)
 
         // If the current state and the target state are the same, return
         if(this.state.get_label() == this.cascade_target_state_string){console.log("Cascading to the same state, return");return;}
@@ -239,7 +239,7 @@ class Stage {
                 this.state = new StateStageFree(this)
                 break;
             case 'local':
-                this.state = new StateStageLocal(this, "recZKD1DclIatreZC") // for testing only
+                this.state = new StateStageLocal(this, "reckeeM7EPI7SOsGF") // for testing only
                 console.log("changed state to:", this.state);
                 break;
             default:
@@ -458,7 +458,7 @@ class StateStageLocal extends StageState {
         selected_particles[0].color = [255,0,0];
         
         // set local targets for the selected particles
-        selected_particles.forEach(particle => this.set_particle_initial_target(particle));
+        //selected_particles.forEach(particle => this.set_particle_initial_target(particle));
 
         // set focused particle flag to move
         selected_particles[0].state.agent_state = 'free';
@@ -481,8 +481,10 @@ class StateStageLocal extends StageState {
             case "neighbors":
                 // Filter the viz particle with userData.place_in_stage == "focused"
                 let focused_particle = this.context.viz_particles.filter(particle => particle.userData.place_in_stage == "focused")[0];
+
                 // Set the target
-                selected_particle.userData.initial_target = focused_particle.pos;
+                //selected_particle.userData.initial_target = focused_particle.pos;
+                focused_particle.state.ask_for_target(selected_particle);
                 break;
 
             case "secondary":
@@ -492,21 +494,23 @@ class StateStageLocal extends StageState {
                 // Get the present neighbors
                 let present_neighbours = this.get_present_neighbors(selected_particle);
 
+                present_neighbours[0].state.ask_for_target(selected_particle);
+
                 // If there's only one present neighbor, set the target to the neighbor
-                if(present_neighbours.length == 1){
-                    selected_particle.userData.initial_target = present_neighbours[0].pos;
-                } else {
+                // if(present_neighbours.length == 1){
+                //     //selected_particle.userData.initial_target = present_neighbours[0].pos;
+                // } else {
 
-                    // If there's more than one present neighbor, set the target to the middle point between the neighbors
-                    let sum_x = 0, sum_y = 0;
-                    present_neighbours.forEach(particle => {
-                        sum_x += particle.pos.x;
-                        sum_y += particle.pos.y;
+                //     // If there's more than one present neighbor, set the target to the middle point between the neighbors
+                //     let sum_x = 0, sum_y = 0;
+                //     present_neighbours.forEach(particle => {
+                //         sum_x += particle.pos.x;
+                //         sum_y += particle.pos.y;
 
-                    })
-                    let middle_point = createVector(sum_x/present_neighbours.length, sum_y/present_neighbours.length);
-                    selected_particle.userData.initial_target = middle_point;
-                }
+                //     })
+                //     let middle_point = createVector(sum_x/present_neighbours.length, sum_y/present_neighbours.length);
+                //     selected_particle.userData.initial_target = middle_point;
+                // }
 
                 break;
         }
@@ -628,6 +632,7 @@ class VizParticle {
 
     clean_user_data(){
         this.userData = {}
+        this.radius = 10
     }
 
     show_ellipse(){
@@ -642,8 +647,29 @@ class VizParticle {
         
     }
 
+    // TODO: This needs to be rewritten.
+    show_edges(){
+        // get the present neighbors
+        let present_neighbors = this.context.state.get_present_neighbors(this);
+        //console.log(present_neighbors)
+        push();
+
+        // for each neighbor, draw a line to it
+        present_neighbors.forEach(neighbor => {
+            stroke(0,20);
+            line(this.pos.x, this.pos.y, neighbor.pos.x, neighbor.pos.y);
+        })
+
+        pop();
+    }
+
     set_label(label_string){
         this.label = label_string;
+    }
+
+    set_radius(radius){
+        //console.log("setting radius")
+        this.radius = radius
     }
 
     show_label(){
@@ -836,7 +862,7 @@ class VizParticle {
 
     arrive(target) {
         // 2nd argument true enables the arrival behavior
-        let slow_radius = 1;
+        let slow_radius = 100;
         return this.seek(target, true, slow_radius);
     }
 
@@ -941,17 +967,33 @@ class VizParticleStateLocal extends VizParticleState {
         // Agent state
         this.agent_state = 'waiting' // Can be free, locked or waiting.
         this.agent_collision = []; // References for colliding agents
+
+        this.target_set = false;
+        this.target = {
+            'host': [],
+            'guest': []
+        }
+
+
+        // Check the place in the stage
+    
+
+       // this.set_target(context);
     }
 
     update(){
-      
+        
+        // If this is the first time update is called, call this.set_target
+        if(!this.target_set){
+            this.set_target(this.context);
+        }
+
+
+
         this.inject_data();
 
-        // Move to target
-        this.agent_collision = this.check_collisions_with_agents();
-
-        
-        let steering = this.arrive(this.context.userData.initial_target);
+        // Move to target     
+        let steering = this.context.arrive(this.target.guest.pos);
         this.context.applyForce(steering);
 
 
@@ -961,25 +1003,28 @@ class VizParticleStateLocal extends VizParticleState {
              this.agent_state = 'locked';
          }
 
-         this.no_overlap();
-        //     // Check the place of this particle in the network particles
-        //     let network_particles = this.context.context.state.local_network_particles;
-        //     let index = network_particles.indexOf(this.context);
-        //     // If this isn't the last particle, set the next particle agent state to free
-        //     if(index < network_particles.length-1){
-        //         network_particles[index+1].state.agent_state = 'free';
-        //     }
+        // If the particle is host for a target, update it
+        if(this.target.host.length > 0){
+            
+            // For all the host particles, call update
+            for(let host of this.target.host){
+                host.update();
+            }
+        }
 
-        
-        
-        // Test repel agents
-        //this.repel_agents();
-        
+
+        // update the physics
         this.context.update_physics();
            
         // Show
+        
+        
+        
+        this.context.show_edges();
         this.context.show_ellipse();
-        this.context.show_label();
+        
+        if(this.show_label){this.context.show_label();}
+        
         this.show_agent_debug();
            
         // Cascade 
@@ -989,64 +1034,75 @@ class VizParticleStateLocal extends VizParticleState {
 
     }
 
+    get_place_in_stage(){
+        return this.context.userData.place_in_stage;
+    }
+    // Sets the target for the particle to move on. It ouputs a target object referenced in the guest.
+    set_target(host_particle){
 
-    no_overlap(){
-        
-        // only check when agent is locked
-        if(this.agent_state != 'locked'){return;}
+        // 1. If the particle doesn't have a db node, return
+        //console.log(this.context.userData.db_node.get_label());
 
-        // check for collisions on the internal perception
-        let interal_colliding_agents = this.check_collisions_with_agents(false);
+        // 2. Set the target based on the place in stage flag
+        //console.log(host_particle.state);
+        switch(this.context.userData.place_in_stage){
+            case "focused":
+                // center
+                // create a target whose guest and host are the same
+                this.target.host.push(new VizTarget(this.context,this.context));
+                break;
 
-        // for each colliding agent, aplly a repel force
-        for(let i = 0; i < interal_colliding_agents.length; i++){
-            
-            let force = p5.Vector.sub(this.context.pos, interal_colliding_agents[i].userData.pos);
-            this.maxSpeed = 3;
-            this.context.applyForce(force);
-            this.maxSpeed = 0;
+            case "neighbors":
+                // Filter the first viz particle with userData.place_in_stage == "focused"
+                let focused_particle = this.context.context.viz_particles.filter(particle => particle.userData.place_in_stage == "focused")[0];
+                // Create a target
+                focused_particle.state.ask_for_target(this.context);
+                break;
+
+            case "secondary":
+                let present_neighbours = host_particle.context.state.get_present_neighbors(this.context);
+                present_neighbours[0].state.ask_for_target(this.context);
+                break;
+
+
         }
 
+        this.target_set = true;
+
     }
-    
-    
-
-   
-
-    // This method is called from the particles connected with the focused particle. I makes a random point near to the position
 
 
     show_agent_debug(){
         //show target
-        push();
-            rect(this.context.userData.initial_target.x, this.context.userData.initial_target.y, 10, 10);
-        pop();
+        // push();
+        //     //rect(this.context.userData.initial_target.x, this.context.userData.initial_target.y, 10, 10);
+        // pop();
 
-        // show agent_perception
-        push()
-            noFill();
-            stroke(255);
-            ellipse(this.context.pos.x, this.context.pos.y, this.external_perception, this.context.external_perception);
-            stroke(255,0,0);
-            ellipse(this.context.pos.x, this.context.pos.y, this.internal_perception, this.internal_perception);
-        pop()
+        // // show agent_perception
+        // push()
+        //     noFill();
+        //     stroke(255);
+        //     ellipse(this.context.pos.x, this.context.pos.y, this.external_perception, this.context.external_perception);
+        //     stroke(255,0,0);
+        //     ellipse(this.context.pos.x, this.context.pos.y, this.internal_perception, this.internal_perception);
+        // pop()
 
         // color change
-        switch(this.agent_state){
-            case 'free':
+        switch(this.context.userData.place_in_stage){
+            case 'focused':
                 this.color = [0,0,255];
                 break;
-            case 'locked':
+            case 'neighbors':
                 this.color = [60,60,60];
                 break;
-            case 'waiting':
+            case 'secondary':
                 this.color = [255,255,255];
                 break;
         }
 
-        push()
-            text(this.agent_collision.length, this.context.pos.x, this.context.pos.y+30);
-        pop()
+        // push()
+        //     text(this.agent_collision.length, this.context.pos.x, this.context.pos.y+30);
+        // pop()
     }
 
     check_collisions_with_agents(external_perception = true){
@@ -1141,6 +1197,32 @@ class VizParticleStateLocal extends VizParticleState {
             return createVector(puntoMedioX,puntoMedioY);
     }}
 
+    // This is ment to be called from the guest particle to set a targetfrom this host particle
+    ask_for_target(guest_particle){
+        
+        //console.log("asking for target")
+        // Make a new target object in the host slot
+        this.target.host.push(new VizTarget(this.context, guest_particle));
+      
+    }
+
+    inject_data(){
+
+        switch(this.context.userData.place_in_stage){
+            case "focused":
+                this.show_label = true;
+                break;
+            case "neighbors":
+                this.show_label = true;
+                break;
+            case "secondary":
+                this.context.set_radius(4);
+                this.show_label = false;
+                break;
+        }
+    }
+
+
 
 }
 
@@ -1151,6 +1233,8 @@ class VizParticleStateFree extends VizParticleState {
         this.set_label("free");
         this.variation = 1;
     }
+
+
 
     
 
@@ -1172,39 +1256,146 @@ class VizTarget{
 
         // Defining the particles
         this.host_particle = host;
-        this.guest_particle = guest;
+        this.guest_particle = guest; // the guest asks fot the target and then receives it with a method.
+         
+        // Define Host Position
+
+        // If its the same particle, set the position to the center
+        if(this.host_particle == this.guest_particle){
+            this.host_particle_pos = createVector(innerWidth/2, innerHeight/2);   
+        } else {
+            this.host_particle_pos = createVector(this.host_particle.pos.x, this.host_particle.pos.y);
+        }
         
-        // Position
-        this.host_particle_pos = createVector(this.host_particle.pos.x, this.host_particle.pos.y);
+        // Random vector
+        this.random_vector = this.create_random_point();
 
+        // Pos of the target
+        this.pos = p5.Vector.add(this.host_particle_pos, this.random_vector);
 
-        // Defining a random point near to the position of the host.
-        // Defining a range for the random point.
-        
-        //
-        this.pos = this.create_random_point();
-
-
-        //this.vel = createVector(0,0);
-        //this.acc = createVector(0,0);
-        //this.radius = 10;
-        
+        // Reference the target in the guest particle
+        //console.log("setting target at", this.guest_particle)
+        this.guest_particle.state.target.guest = this;
     
     }
 
     update(){
+        // Updating the target
+        if(this.host_particle == this.guest_particle){
+        this.pos = this.host_particle_pos} 
+        else {
+        this.pos = p5.Vector.add(this.host_particle.pos, this.random_vector);
+        }
+
+        //this.show_debug();
+        
         
     }
 
+
     // Creates a random point near to the position
-    create_random_point(){
-        let random_range = 150;
-       let random_point = createVector(random(this.host_particle_pos.x-random_range, this.host_particle_pos.x+random_range), random(this.host_particle_pos.y-random_range, this.host_particle_pos.y+random_range));
-       return random_point;
+    create_random_point() {
+        let random_point = createVector(random(-100,100), random(-100,100));
+        if (this.host_particle == this.guest_particle) {
+            return random_point;
+        }
+         
+
+        let separation_magnitude = 100;
+        if(this.guest_particle.userData.place_in_stage === "neighbors"){
+
+            separation_magnitude = 200;
+        }
+        if(this.guest_particle.userData.place_in_stage === "secondary"){
+            separation_magnitude = 50;
+        }
+        random_point.setMag(/*random(100,150)*/separation_magnitude); // this range should be diferent for the different places in stage
+
+        if(this.host_particle.userData.angle_counter == undefined){
+            this.host_particle.userData.angle_counter = 1;
+        }
+
+        this.host_particle.userData.angle_counter++;
+            
+            
+    
+            // Increase the angle counter
+            let angle =  this.host_particle.userData.angle_counter;
+
+            // set the number multiply divide by
+            let number_to_multiply = 350/this.host_particle.context.staged_nodes['neighbors'].length;
+
+            random_point.setHeading(radians(angle*number_to_multiply));
+             return random_point;
+             
+        
+        
+        
     }
+
+    check_if_target_is_well_placed(random_point){
+
+        // Look for the VizTarget objects present in stage.
+        let local_network = this.host_particle.context.state.local_network_particles;
+        let present_targets = [];
+
+        // For each particle in the local network get the targets
+        for (let i = 0; i < local_network.length; i++) {
+            if(local_network[i].state.target.host.length > 0){
+                for(let j = 0; j < local_network[i].state.target.host.length; j++){
+                    present_targets.push(local_network[i].state.target.host[j]);
+                }
+            }
+        }
+        let position_candidate = p5.Vector.add(this.host_particle.pos, random_point);
+       
+        // If there are no targets, return true
+        if(present_targets.length === 0){return true;}
+
+        // If this target is too close to another target, return false
+        for(let i = 0; i < present_targets.length; i++){
+            let distance = p5.Vector.dist(position_candidate, present_targets[i].pos);
+            console.log(distance)
+            if(distance < 200){
+                console.log("too close, try again")
+                return false;
+                
+            } else {
+                return true;
+            }
+        }
+return true;
+
+    }
+
+    // make_point_in_radius(startVector, radius) {
+
+    //     // Initialize an angle counter in the host particle
+    //     if(this.host_particle.userData.angle_counter == undefined){
+    //         this.host_particle.userData.angle_counter = 0;
+    //     }
+    //     let angle = this.host_particle.userData.angle_counter;
+
+    //     // Increase the angle counter
+    //     angle += PI / 6
+
+        
+    //     let randomVector = p5.Vector.fromAngle(angle); // Create a random direction vector
+    //     randomVector.setMag(radius); // Set the magnitude to the given radius
+    //     let newVector = p5.Vector.add(startVector, randomVector); // Add the random vector to the start vector
+    //     return newVector;
+    //   }
 
     // show graphical debug iformation
     show_debug(){
+
+        if(debug){
+
+            push()
+            fill('pink');
+            ellipse(this.pos.x, this.pos.y, 10, 10);
+            pop()
+        }
         
     }
 
