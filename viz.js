@@ -23,20 +23,9 @@ class Stage {
         // Local network
         this.staged_nodes = {
             'focused': null,
-            'neighbors': [],
+            'neighbours': [],
             'secondary': []
         }
-
-        // Placement areas for the local network
-        this.placement_areas = {
-            'areas': {
-                'focused_area': new Circle(innerWidth/2, innerHeight/2, 200, 200), // TODO: Width and height values should be dynamically calculated
-                'neighbors_area': new Circle(innerWidth/2, innerHeight/2, 400, 400),
-                'secondary_area': new Circle(innerWidth/2, innerHeight/2, 600, 600)
-            },
-            'targets': []
-        }
-       
 
         // List of viz particles
         this.viz_particles = [];
@@ -85,52 +74,9 @@ class Stage {
     }
 
     // Stage node control
-    focus_on_node(record_id){
+    
 
-        // Get the node
-        let selected_node = get_single_node_anywhere(record_id);
-        
-        // Remove the selected node from the neighbors and secondary
-        this.staged_nodes.neighbors = this.staged_nodes.neighbors.filter(item => item != selected_node);
-        this.staged_nodes.secondary = this.staged_nodes.secondary.filter(item => item != selected_node);
 
-        // Put the node in focus
-        this.staged_nodes.focused = selected_node;
-
-        // Focused node's neigbours
-        this.staged_nodes.neighbors = selected_node.get_neighbours();
-
-        // Empty the secondary neighbors
-        this.staged_nodes.secondary = [];
-
-        // Get Neighbours' neigbours
-        for(let i = 0; i < this.staged_nodes.neighbors.length; i++){
-
-            this.staged_nodes.neighbors[i].get_neighbours().forEach(element => {
-                
-                // If the element is not in the secondary neighbors, push it
-                if(!this.staged_nodes.secondary.includes(element)){
-
-                    this.staged_nodes.secondary.push(element);
-                }
-            });
-        }
-        
-        if(debug){
-            console.log("Focused on node: ", this.staged_nodes.focused.semantic_id, " with ", this.staged_nodes.neighbors.length, " neigbours and ", this.staged_nodes.secondary.length, " secondary neigbours");
-        }
-
-    }
-
-    /**
-     * Updates the quadtree with the current positions of the particles.
-     *
-     * This function clears the existing quadtree and then iterates over each particle
-     * in the `viz_particles` array. For each particle, it creates a new `Point` object
-     * with the particle's x and y coordinates, and the particle itself as the data.
-     * The `Point` object is then inserted into the quadtree using the `insert` method.
-     *
-     */
     update_quadtree(){
         // Update quadtree
         this.quadtree.clear();
@@ -244,7 +190,6 @@ class Stage {
                 break;
             default:
                 this.state = new StateStageFree(this)
-                console.log("helloooooo")
                 break;
 
         }
@@ -310,7 +255,7 @@ class StateStageFree extends StageState {
         }
 
         //If the particles are cascading, update them.
-        if(this.context.cascading){this.context.update_cascading();}
+        // if(this.context.cascading){this.context.update_cascading();}
 
     }
 
@@ -351,15 +296,18 @@ class StateStageLocal extends StageState {
         super(context);
 
         // Everytime this state is created, it must carry one record id to build a local network.
-        this.focused_record_id = focused_record_id;
+        this.initial_focused_record_id = focused_record_id;
 
         this.label = "local";
 
-        this.local_network_particles = []; // references for the local network particles
-        // Build the local network
-        this.animating_particle = null;
-        this.build_local_particle_network(this.focused_record_id);
+        // Where stage local particles will be stored
+        this.local_particles = []
 
+        // Testing purposes
+        this.transform_local_network("reckeeM7EPI7SOsGF");
+        // dat_gui.add(gui_functions, 'Change particle focus');
+
+        
     
     }
 
@@ -375,9 +323,16 @@ class StateStageLocal extends StageState {
 
         // Get the particles in local state
         let local_particles = this.context.viz_particles.filter(p => p.state.get_label() == "local");
+        // Filter different palces in stage from the local
+        let secondary_particles = local_particles.filter(p => p.userData.place_in_stage == "secondary");
+        let neighbour_particles = local_particles.filter(p => p.userData.place_in_stage == "neighbours");
+        let focused_particle = local_particles.filter(p => p.userData.place_in_stage == "focused")[0];
 
         // update them
-        local_particles.forEach(p => p.update());
+        //local_particles.forEach(p => p.update());
+        secondary_particles.forEach(p => p.update());
+        neighbour_particles.forEach(p => p.update());
+        focused_particle.update();
 
 
 
@@ -386,173 +341,802 @@ class StateStageLocal extends StageState {
 
     }
 
-    build_local_particle_network(record_id){
-        
-        // Random particles to be assigned as part of the local network
-        let selected_particles = [];
+    clear_targets_for_local_particles(){
+        // Check if there are any local particles
+        if(this.local_particles == 0){return;} else {
 
-        // Focus on a node, get its neighbors and secondary, populate the staged nodes
-        this.context.focus_on_node(record_id);
-
-        // Get the number of nodes needed to build the network
-        let number_of_particles_for_local_network = this.context.staged_nodes['neighbors'].length + this.context.staged_nodes['secondary'].length + 1;
-
-        // Get the particle in the quadtree more nearest to the center
-        let search_radius = 100;
-        let center = new Circle(innerWidth/2, innerHeight/2, search_radius);
-        let center_particles = this.context.quadtree.query(center);
-
-        // Asign a center particle to the selected particles
-        selected_particles.push(center_particles[0].userData);
-
-        // In the next iteraion we can use zones of exclusion for selecting the rest of the nodes.
-        // for now, just pick random nodes
-        while (selected_particles.length < number_of_particles_for_local_network){
-
-            // Pick a random index
-            let random_index = parseInt(random(this.context.viz_particles.length));
-            // If the particle is not already present in the selected particles, push it.
-            if(selected_particles.indexOf(this.context.viz_particles[random_index]) === -1){
-                selected_particles.push(this.context.viz_particles[random_index]);
+            // Clear the targets
+            for (let i = 0; i < this.local_particles.length; i++) {
+                this.local_particles[i].state.target.host = [];
+                this.local_particles[i].state.target.guest = null;
             }
         }
+    }
 
-        // In a variable, Filter all the viz particles that are not in the selected particles
-        let excluded_particles = this.context.viz_particles.filter(particle => selected_particles.indexOf(particle) === -1);
+    set_targets_for_local_particles(){
 
-        // Lock the state of the excluded particles
-        excluded_particles.forEach(particle => particle.state.lock_state());
+        // Check if there are any local particles
+        if(this.local_particles == 0){return;} else {
 
-        console.log("Local network built, selected_particles: " + selected_particles.length);
+            // For the focused particle, the target is itself
+            let focused_particle = this.local_particles[0];
+            let focused_target = new VizTarget(this.local_particles[0], this.local_particles[0]);
+            focused_particle.state.target.host.push(focused_target);
+            focused_particle.state.target.guest = focused_target;
 
-        // change the state of the selected particles
-        selected_particles.forEach(particle => particle.set_state('local'));
+            // For each of the neighbours, set target to the focused particle
+            // Filter the neibours
+            let neigbours = this.local_particles.filter(p => p.userData.place_in_stage == "neighbours");
+            for(let i = 0; i < neigbours.length; i++){
+                let target = new VizTarget(this.local_particles[0], neigbours[i]);
+                // Referencing the target in the host
+                this.local_particles[0].state.target.host.push(target);
+                neigbours[i].state.target.guest = target;
+            }
 
-        // TODO: This should be a separate method
-        // Asign the db nodes to the selected particles
-        // Asign the focus particle
-        selected_particles[0].userData.db_node = this.context.staged_nodes['focused'];
-        // tag the particle
-        selected_particles[0].userData.place_in_stage = "focused";
-        // reference the particle in the state's array
-        this.local_network_particles.push(selected_particles[0]);
+            // for the secondary, put the host in the first present neigbour
+            // filter the secondarty
+            let secondary = this.local_particles.filter(p => p.userData.place_in_stage == "secondary");
+            
+            for(let i = 0; i < secondary.length; i++){
+                
+                let particle_first_neighbour = secondary[i].context.state.get_present_neighbours_for_secondary(secondary[i])[0];
 
+                console.log("particle_first_neigbour",particle_first_neighbour)
+                let target = new VizTarget(particle_first_neighbour, secondary[i]);
+                particle_first_neighbour.state.target.host.push(target);
+                secondary[i].state.target.guest = target;
+            }
 
-        // Asign the neighbors
-        for(let i = 0; i < this.context.staged_nodes['neighbors'].length; i++){
-            selected_particles[i+1].userData.db_node = this.context.staged_nodes['neighbors'][i];
-            // tag
-            selected_particles[i+1].userData.place_in_stage = "neighbors";
-            this.local_network_particles.push(selected_particles[i+1]);
         }
-        // Asign the secondary neighbors
-        for(let i = 0; i < this.context.staged_nodes['secondary'].length; i++){
-            selected_particles[i+1+this.context.staged_nodes['neighbors'].length].userData.db_node = this.context.staged_nodes['secondary'][i];
-            // tag
-            selected_particles[i+1+this.context.staged_nodes['neighbors'].length].userData.place_in_stage = "secondary";
-            this.local_network_particles.push(selected_particles[i+1+this.context.staged_nodes['neighbors'].length]);
+    }
+
+    // Transform local network
+    // This method will take the focused node and then transform the local network around it, adding the targets and edges between the nodes.
+    async transform_local_network(focused_record_id){
+
+        // Focus on a node
+        this.staged_nodes = this.focus_on_db_node(focused_record_id);
+
+        // If there are particles in the local network, clear the targets
+        this.clear_targets_for_local_particles();
+
+        // let response = await this.transform_particles_around_staged_nodes(this.staged_nodes);
+       
+        // transform particles around staged nodes, and than callback set target for local network
+        this.transform_particles_around_staged_nodes().then(response => this.set_targets_for_local_particles());
+
+    }
+
+    // This will focus on a node an then transform the local particles. Targets are to be defined after this method.
+    async transform_particles_around_staged_nodes(){
+        // Subfunction definition
+
+        const check_if_dbnode_present = (particle) => {
+            // console.log(focused_nodes)
+            // Particle record id
+            let particle_record_id = particle.userData.db_node.record_id;
+            console.log("particle",particle.label, "record id:",particle_record_id)
+            let focused_nodes = this.staged_nodes;
+            
+            let present_node = []
+
+            // check for the node in the focused nodes
+            for(let i = 0; i < focused_nodes['focused'].length; i++){
+
+                if(focused_nodes['focused'][i].record_id == particle_record_id){
+                    present_node.push(focused_nodes['focused'][i]);
+                }
+            }
+            for(let i = 0; i < focused_nodes['neighbours'].length; i++){
+
+                if(focused_nodes['neighbours'][i].record_id == particle_record_id){
+                    present_node.push(focused_nodes['neighbours'][i]);
+                }
+            }
+
+            for(let i = 0; i < focused_nodes['secondary'].length; i++){
+
+                if(focused_nodes['secondary'][i].record_id == particle_record_id){
+                    present_node.push(focused_nodes['secondary'][i]);
+                }
+            }
+
+            // Check if the particle record id is in the nodes array
+            // present_node = nodes_array.filter(node => node.record_id == particle_record_id);
+
+            if(present_node.length > 0){return true;} else {return false;}
+
         }
 
-        // Asign a label to the selected particles from the db node
-        selected_particles.forEach(particle => particle.label = particle.userData.db_node.get_label());
-        selected_particles[0].color = [255,0,0];
+        // Make new Promise
+        return new Promise((resolve, reject) => {
+            
+            // Get the focused node
+            let focused_nodes = this.staged_nodes;
+
+            if (this.local_particles.length > 0) {
+
+                // If there are particles in the local network,look for nodes to transform to free
+                let particles_to_free = [];
+
+                for(let i = 0; i < this.local_particles.length; i++){
+                    let is_present = check_if_dbnode_present(this.local_particles[i]);
+                    if (is_present == true) { continue } else { particles_to_free.push(this.local_particles[i]);}
+                }
+
+                // this.local_particles.forEach(particle => {
+                //     let is_present = check_if_dbnode_present(particle, focused_nodes);
+                //     if (is_present == true) { particles_to_free.push(particle); }
+                // })
+
+                // Remove the particles to free from the local network
+                this.local_particles = this.local_particles.filter(particle => particles_to_free.includes(particle) == false);
+
+                // Free them
+                particles_to_free.forEach(particle => {
+                    // console.log('freeing', particle)
+                    particle.set_state('free');
+                })
+                console.log('freeing', particles_to_free.length, 'particles')
+            }
+
+            console.log("local network length:", this.local_particles.length)
+            // Transform all particles from the focused nodes. (The method will handle if they're misplaced or already present)
+
+            // Transform the focused one
+            let focused_node = this.transform_particle_to_local(focused_nodes['focused'][0].record_id, 'focused');
+            console.log("focused created:", focused_node)
+            // Transform the neighbours
+            let neigbours_counter = 0;
+            focused_nodes['neighbours'].forEach(node => {
+                this.transform_particle_to_local(node.record_id, 'neighbours');
+                neigbours_counter++;
+            })
+            console.log("neighbours created:", neigbours_counter)
+            // Transform the secondary
+            let secondary_counter = 0;
+            focused_nodes['secondary'].forEach(node => {
+                this.transform_particle_to_local(node.record_id, 'secondary');
+                secondary_counter++;
+            })
+            console.log("secondary created:", secondary_counter)
+            
+            console.log("New local network created around", get_single_node_anywhere(focused_nodes['focused'][0].record_id).get_label(), "with", this.local_particles.length, "particles");
+
+
+            // nasty fix for focused particle
+            this.local_particles[0].userData.place_in_stage = "focused";
+
+            // Resolve
+            resolve("done with local network");
+            
+        })
+
+    }
+
+
+    transform_particle_to_local(record_id, place_in_stage){
         
-        // set local targets for the selected particles
-        //selected_particles.forEach(particle => this.set_particle_initial_target(particle));
+        // Checking the input of the method...
 
-        // set focused particle flag to move
-        selected_particles[0].state.agent_state = 'free';
+        if(place_in_stage == undefined){
+            console.log("place in stage not defined, return!");
+            return;
+        }
+        if(record_id == undefined){
+            console.log("record id not defined, return!");
+            return;
+        }
 
+
+
+        const transform_particle = (record_id, place_in_stage, free_particle) => {
+
+            // Get a random free particle
+            let new_particle = free_particle;
+
+            // change the particle's state to local
+            new_particle.state.unlock_state();
+            new_particle.set_state("local");
+
+            
+            //asign the particle's db node
+            let db_node = get_single_node_anywhere(record_id);
+            new_particle.userData.db_node = db_node;
+
+            // set the label
+            new_particle.label = db_node.get_label();
+
+            // set the particle's place in stage
+            new_particle.userData.place_in_stage = place_in_stage;
+
+            // set agent state to free
+            new_particle.state.agent_state = "free";
+            // console.log("new particle:", new_particle);
+
+            // Reference the particle in local_particles
+            
+            this.local_particles.push(new_particle);
+            
+
+            return new_particle;
+            
+        }
+
+        // If there's a particle present with the input record id, return that particle.
+        if(this.is_particle_present(record_id).is_present){
+            
+            this.move_particle_if_misplaced(record_id, place_in_stage);
+            console.log("particle already present, do not trasnform, return!");
+            return;
+
+        } else {
+
+            // If there's no particle present, transform a free particle into a local particle
+            let free_particle = this.get_random_free_particle();
+            let new_particle = transform_particle(record_id, place_in_stage, free_particle);
+
+            return new_particle;
+            //
+        }
+
+    }
+
+    is_particle_present(record_id){
+       
+        let return_particle = null;
+
+        // Join all the staged particles into one array
+        let all_staged_particles = this.local_particles;
+
+        let is_present = false;
+        
+        // console.log("all present particles:", all_staged_particles)
+        // Check if the particle is present
+        //Filter all staged particles by the record id
+        let filtered_particles = all_staged_particles.filter(particle => particle.userData.db_node.record_id == record_id);
+
+        if(filtered_particles.length > 0){is_present = true; return_particle = filtered_particles[0];}
+
+        const answer_message = is_present ? "is present" : "is not present";
+        // console.log("Is Particle Present?:", record_id, answer_message);
+
+        return {'is_present': is_present, 'particle': return_particle};
         
     }
 
-    // Set the arrive target for an individual particle, depending on its state and db node.
-    set_particle_initial_target(selected_particle){
+    
 
-        // If the particle doesn't have a db node, return
-        if(!selected_particle.userData.db_node && selected_particle.state.get_label() != "local"){return;}
+    move_particle_if_misplaced(record_id, correct_place_in_stage) {
 
-        // Set the target based on the place in stage flag
-        switch(selected_particle.userData.place_in_stage){
-            case "focused":
-                // center
-                selected_particle.userData.initial_target = createVector(innerWidth/2, innerHeight/2);
-                break;
-            case "neighbors":
-                // Filter the viz particle with userData.place_in_stage == "focused"
-                let focused_particle = this.context.viz_particles.filter(particle => particle.userData.place_in_stage == "focused")[0];
+        // console.log("checking if particle is misplaced...");
+        // Check if the particle is present in the staged particles
+        let check_if_present = this.is_particle_present(record_id).is_present;
 
-                // Set the target
-                //selected_particle.userData.initial_target = focused_particle.pos;
-                focused_particle.state.ask_for_target(selected_particle);
-                break;
-
-            case "secondary":
-
-                // For the secondary, the target may change on the amount of present neighbours. If there's one present neighbor, the target will be the neighbor. If there's more than one present neighbor, it sould calculate the middle point between the neighbors.
-                
-                // Get the present neighbors
-                let present_neighbours = this.get_present_neighbors(selected_particle);
-
-                present_neighbours[0].state.ask_for_target(selected_particle);
-
-                // If there's only one present neighbor, set the target to the neighbor
-                // if(present_neighbours.length == 1){
-                //     //selected_particle.userData.initial_target = present_neighbours[0].pos;
-                // } else {
-
-                //     // If there's more than one present neighbor, set the target to the middle point between the neighbors
-                //     let sum_x = 0, sum_y = 0;
-                //     present_neighbours.forEach(particle => {
-                //         sum_x += particle.pos.x;
-                //         sum_y += particle.pos.y;
-
-                //     })
-                //     let middle_point = createVector(sum_x/present_neighbours.length, sum_y/present_neighbours.length);
-                //     selected_particle.userData.initial_target = middle_point;
-                // }
-
-                break;
+        if (check_if_present == false) {
+            // console.log("particle is not present, return!");
+            return;
         }
+
+        // Particle is present
+        else{
+            // If the particle is present
+            // console.log("particle is present, checking if it is misplaced...");
+            // define the particle
+            let particle = this.is_particle_present(record_id).particle;
+
+            // Check if the particle is misplaced
+            let is_misplaced = particle.userData.place_in_stage != correct_place_in_stage;
+            
+            if(is_misplaced == false){
+                // console.log("particle is not misplaced, return!");
+                return;
+            } 
+            else{
+                // Set the correct place in the particles userData
+                particle.userData.place_in_stage = correct_place_in_stage;
+
+            }
+
+            // Move the particle to the right place
+
+        }
+    }
+
+    get_random_free_particle(){
+        
+        let free_particles = this.context.viz_particles.filter(particle => particle.state.get_label() == "free");
+        let random_particle = free_particles[parseInt(random(free_particles.length))];
+        //console.log("got random particle", random_particle);
+        return random_particle;
+
+    }
+
+    // Returns an boject focusing in a specific node, with its neighbours and secondary neighbours
+    focus_on_db_node(record_id){
+
+        // Get the node
+        let selected_node = get_single_node_anywhere(record_id);
+
+        // Set the return object
+        let staged_nodes = {'focused': [], 'neighbours': [], 'secondary': []};
+        
+        // Remove the selected node from the neighbours and secondary
+        staged_nodes.neighbours = staged_nodes.neighbours.filter(item => item != selected_node);
+        staged_nodes.secondary = staged_nodes.secondary.filter(item => item != selected_node);
+
+        // Put the node in focus
+        staged_nodes.focused.push(selected_node);
+
+        // Focused node's neigbours
+        staged_nodes.neighbours = selected_node.get_neighbours();
+
+        // Empty the secondary neighbours
+        staged_nodes.secondary = [];
+
+        // Get Neighbours' neigbours
+        for(let i = 0; i < staged_nodes.neighbours.length; i++){
+
+            staged_nodes.neighbours[i].get_neighbours().forEach(element => {
+                
+                // If the element is not in the secondary neighbours, push it
+                if(!staged_nodes.secondary.includes(element)){
+
+                    staged_nodes.secondary.push(element);
+                }
+            });
+        }
+        
+        if(debug){
+            console.log("Focused on node: ", staged_nodes.focused[0].semantic_id, " with ", staged_nodes.neighbours.length, " neigbours and ", staged_nodes.secondary.length, " secondary neigbours");
+        }
+
+        return staged_nodes;
+
+    }
+
+    // This needs to be changed.
+    // It works, but only for the transition between free and local stage stage.
+    // to be excecuted in the constructor.
+    // build_local_particle_network(record_id){
+        
+    //     // Random particles to be assigned as part of the local network
+    //     let selected_particles = [];
+
+    //     // Focus on a node, get its neighbours and secondary, populate the staged nodes
+    //     this.context.focus_on_node(record_id);
+
+    //     // Get the number of nodes needed to build the network
+    //     let number_of_particles_for_local_network = this.context.staged_nodes['neighbours'].length + this.context.staged_nodes['secondary'].length + 1;
+
+    //     // Get the particle in the quadtree more nearest to the center
+    //     let search_radius = 100;
+    //     let center = new Circle(innerWidth/2, innerHeight/2, search_radius);
+    //     let center_particles = this.context.quadtree.query(center);
+
+    //     // Asign a center particle to the selected particles
+    //     selected_particles.push(center_particles[0].userData);
+
+    //     // In the next iteraion we can use zones of exclusion for selecting the rest of the nodes.
+    //     // for now, just pick random nodes
+    //     while (selected_particles.length < number_of_particles_for_local_network){
+
+    //         // Pick a random index
+    //         let random_index = parseInt(random(this.context.viz_particles.length));
+    //         // If the particle is not already present in the selected particles, push it.
+    //         if(selected_particles.indexOf(this.context.viz_particles[random_index]) === -1){
+    //             selected_particles.push(this.context.viz_particles[random_index]);
+    //         }
+    //     }
+
+    //     // In a variable, Filter all the viz particles that are not in the selected particles
+    //     let excluded_particles = this.context.viz_particles.filter(particle => selected_particles.indexOf(particle) === -1);
+
+    //     // Lock the state of the excluded particles
+    //     excluded_particles.forEach(particle => particle.state.lock_state());
+
+    //     console.log("Local network built, selected_particles: " + selected_particles.length);
+
+    //     // change the state of the selected particles
+    //     selected_particles.forEach(particle => particle.set_state('local'));
+
+    //     // TODO: This should be a separate method
+    //     // Asign the db nodes to the selected particles
+    //     // Asign the focus particle
+    //     selected_particles[0].userData.db_node = this.context.staged_nodes['focused'];
+    //     // tag the particle
+    //     selected_particles[0].userData.place_in_stage = "focused";
+    //     // reference the particle in the state's array
+    //     this.local_network_particles.push(selected_particles[0]);
+
+
+    //     // Asign the neighbours
+    //     for(let i = 0; i < this.context.staged_nodes['neighbours'].length; i++){
+    //         selected_particles[i+1].userData.db_node = this.context.staged_nodes['neighbours'][i];
+    //         // tag
+    //         selected_particles[i+1].userData.place_in_stage = "neighbours";
+    //         this.local_network_particles.push(selected_particles[i+1]);
+    //     }
+    //     // Asign the secondary neighbours
+    //     for(let i = 0; i < this.context.staged_nodes['secondary'].length; i++){
+    //         selected_particles[i+1+this.context.staged_nodes['neighbours'].length].userData.db_node = this.context.staged_nodes['secondary'][i];
+    //         // tag
+    //         selected_particles[i+1+this.context.staged_nodes['neighbours'].length].userData.place_in_stage = "secondary";
+    //         this.local_network_particles.push(selected_particles[i+1+this.context.staged_nodes['neighbours'].length]);
+    //     }
+
+    //     // Asign a label to the selected particles from the db node
+    //     selected_particles.forEach(particle => particle.label = particle.userData.db_node.get_label());
+    //     selected_particles[0].color = [255,0,0];
+        
+    //     // set local targets for the selected particles
+    //     //selected_particles.forEach(particle => this.set_particle_initial_target(particle));
+
+    //     // set focused particle flag to move
+    //     selected_particles[0].state.agent_state = 'free';
+
+        
+    // }
+
+    // This methos is meant to be called from the interaction to one neighbor particle in the local state, to rearrange the local network with focus on the selected particle.
+    
+    // change_particle_focus(selected_particle){
+
+    //     // Subfunction declaration
+    //     const get_random_free_particle = () => {
+    //         let free_particles = this.context.viz_particles.filter(particle => particle.state.get_label() == "free");
+    //         let random_particle = free_particles[parseInt(random(free_particles.length))];
+    //         //console.log("got random particle", random_particle);
+    //         return random_particle;
+    //     }
+
+    //     const assign_particles = (db_node, place_in_stage, get_random_free_particle) => {
+
+    //         // Get a random free particle
+    //         let new_particle = get_random_free_particle();
+
+    //         // change the particle's state to local
+    //         new_particle.state.unlock_state();
+    //         new_particle.set_state("local");
+
+    //         //asign the particle's db node
+    //         new_particle.userData.db_node = db_node;
+
+    //         // set the label
+    //         new_particle.label = db_node.get_label();
+
+    //         // set the particle's place in stage to focused
+    //         new_particle.userData.place_in_stage = place_in_stage;
+
+    //         // set agent state to free
+    //         new_particle.state.agent_state = "free";
+
+    //         return new_particle;
+    
+    //     }
+
+    //     console.log("Changing focus on particle: ", selected_particle.userData.db_node.get_label());
+        
+    //     // 1. Focus the db nodes on the selected particle
+    //     this.context.focus_on_node(selected_particle.userData.db_node.record_id);
+
+    //     // Initialize asnswer arrray
+    //       this.refocus_particle_answer = {
+    //         'freed' : [],
+    //         'moved' : [],
+    //     };
+        
+
+    //     // 2. For all the staged particles, send a message to refocus. This will change position or delete depending on the new data on staged nodes.
+    //     for(let i = 0; i < this.local_network_particles.length; i++){
+    //         this.local_network_particles[i].state.refocus();
+    //     }
+
+    //     // Debug
+    //     console.log(this.refocus_particle_answer);
+    //     console.log("freed: " + this.refocus_particle_answer['freed'].length);
+    //     console.log("moved: " + this.refocus_particle_answer['moved'].length);
+    //     console.log(this.refocus_particle_answer);
+
+    //     // 3. Identify the remaining particles that need to be built.
+    //     // remaining particles = stages nodes - moved particles
+    //     let remaining_particles = {
+    //         'neighbours' : [],
+    //         'secondary' : [],
+    //     };
+
+    //     // Get the Moved particles record ids
+    //     let moved_particles_record_ids = this.refocus_particle_answer['moved'].map(element => element.particle.userData.db_node.record_id);
+
+    //     // Search the staged nodes for the remaining particles
+    //     // Search neighbours
+    //     // For all neighbours, check if are particles whose record id is not in the moved_particles_record_ids
+    //     remaining_particles.neighbours = this.context.staged_nodes['neighbours'].filter(element => {
+    //         if(moved_particles_record_ids.indexOf(element.record_id) == -1){
+    //             return true;
+    //         } else {
+    //             return false;
+    //         }
+    //     })
+
+        
+
+    //     // Search secondary and add it to the remaining_particles
+    //     // returns db nodes
+    //     remaining_particles.secondary = this.context.staged_nodes['secondary'].filter(element => {
+    //         if(moved_particles_record_ids.indexOf(element.record_id) == -1){
+    //             return true;
+    //         } else {
+    //             return false;
+    //         }
+    //     });
+
+    //     console.log("remaining_particles: ",remaining_particles);
+
+    //     // 4. Transform the remaining particles
+    //     let new_particles = [];
+    //     remaining_particles.neighbours.forEach(element => {
+    //         new_particles.push(assign_particles(element, "neighbours", get_random_free_particle));
+    //     })
+    //     remaining_particles.secondary.forEach(element => {
+    //         new_particles.push(assign_particles(element, "secondary", get_random_free_particle));
+    //     })
+
+    //     // 5. Free the old particles
+    //     this.refocus_particle_answer['freed'].forEach(element => {
+    //         element.particle.state.unlock_state();
+    //         element.particle.set_state("free");
+    //     })
+
+
+    // }
+    
+    // //DEPRECATED!
+    // old_change_particle_focus(selected_particle){
+
+    //     //
+    //     console.log("Changing focus on particle: ", selected_particle.userData.db_node.get_label());
+
+    //     // Get the place in stage of the selected particle
+    //     let sp_place_in_stage = selected_particle.userData.place_in_stage;
+
+    //     // If the selected particle is focused, return
+    //     if(sp_place_in_stage == "focused"){return;}
+        
+    //     // Store the old staged particles
+    //     let old_staged_particles = this.local_network_particles;
+
+    //     // Focus on node based on the selected particle
+    //     let node = selected_particle.userData.db_node;
+    //     this.context.focus_on_node(node.record_id);
+
+       
+
+    //     // For each particle in the old staged particles, check if they are in the new staged nodes. If so, push them to particles_to_keep.
+    //     let particles_to_keep = [];
+    //     for(let i = 0; i < old_staged_particles.length; i++){
+            
+    //         let particle_node_record_id = old_staged_particles[i].userData.db_node.record_id;
+    //         let new_staged_nodes = this.context.staged_nodes;
+
+    //         // Check if the particle is the focused particle. If so, push it to particles_to_keep.
+    //         if(particle_node_record_id == new_staged_nodes['focused'].record_id){ particles_to_keep.push(old_staged_particles[i]); continue; }
+
+    //         // Check if the particle is in the neighbours. If so, push it to particles_to_keep.
+    //         for(let j = 0; j < new_staged_nodes['neighbours'].length; j++){
+    //             if(particle_node_record_id == new_staged_nodes['neighbours'][j].record_id){ particles_to_keep.push(old_staged_particles[i]); continue; }
+    //         }
+
+    //         // Check if the particle is in the secondary. If so, push it to particles_to_keep.
+    //         for(let k = 0; k < new_staged_nodes['secondary'].length; k++){
+    //             if(particle_node_record_id == new_staged_nodes['secondary'][k].record_id){ particles_to_keep.push(old_staged_particles[i]); continue; }
+    //         }
+    //     }
+    //     console.log("particles to keep: ", particles_to_keep)
+
+    //     // for the particles that are not in the new staged nodes, change their state to free
+    //     let freed_particles = [];
+    //     for(let i = 0; i < old_staged_particles.length; i++){
+    //         if(!particles_to_keep.includes(old_staged_particles[i])){ 
+    //             old_staged_particles[i].state.unlock_state(); 
+    //             old_staged_particles[i].set_state("free");
+    //             freed_particles.push(old_staged_particles[i]);
+    //             }
+    //     }
+
+    //     console.log("particles set state to free: ", freed_particles)
+
+
+    //     // Define a subfunction to get a random free particle
+    //     const get_random_free_particle = () => {
+    //         let free_particles = this.context.viz_particles.filter(particle => particle.state.get_label() == "free");
+    //         let random_particle = free_particles[parseInt(random(free_particles.length))];
+    //         //console.log("got random particle", random_particle);
+    //         return random_particle;
+    //     }
+
+    // // 3. Assing particles
+
+    //     let newly_transformed_particles = []; 
+        
+
+    //     // Define a function to asign particles
+    //     const assign_particles = (db_node, place_in_stage, particles_to_keep, newly_transformed_particles, get_random_free_particle) => {
+
+    //         // Move the particle to the newly transformed particles
+    //         newly_transformed_particles.push(get_random_free_particle());
+
+    //         // Define the last item of the newly transformed particles
+    //         let new_particle = newly_transformed_particles[newly_transformed_particles.length-1];
+
+    //         // change the particle's state to local
+    //         new_particle.state.unlock_state();
+    //         new_particle.set_state("local");
+
+    //         //asign the particle's db node
+    //         new_particle.userData.db_node = db_node;
+
+    //         // set the label
+    //         new_particle.label = db_node.get_label();
+
+    //         // set the particle's place in stage to focused
+    //         new_particle.userData.place_in_stage = place_in_stage;
+
+    //         // set agent state to free
+    //         new_particle.state.agent_state = "free";
+    
+    //     }
+
+    // // 3.1 Asign the focused particle
+        
+    //     // Does any of the particles to keep have a dbnode record id of the focused particle?
+    //     let is_focused_particle_already_in_keep = particles_to_keep.some(particle => particle.userData.db_node.record_id == this.context.staged_nodes['focused'].record_id); 
+
+    //     // If so, Push the first empty particle to be transformed to the newly transformed particles, then remove that particle from the empty_particles_to_be_transformed. And transform it to local state
+    //     if(!is_focused_particle_already_in_keep){
+            
+    //         // Assign the focused particle
+    //         assign_particles(this.context.staged_nodes['focused'], "focused", particles_to_keep, newly_transformed_particles, get_random_free_particle);
+    
+    //     }
+
+    //     // 3.2 Asign the neighbours
+
+    //     // For all the neigbours of the staged nodes
+    //     this.context.staged_nodes['neighbours'].forEach(node => {
+
+    //         // Is this neighbour node already present in the particles to keep?
+    //         let neighbour_already_in_keep = particles_to_keep.some(particle => particle.userData.db_node.record_id == node.record_id);
+
+    //         // If not, push the first empty particle to be transformed to the newly transformed particles, then remove that particle from the empty_particles_to_be_transformed. And transform it to local state.
+    //         if(!neighbour_already_in_keep){
+
+    //             // Asign the neighbor
+    //             assign_particles(node, "neighbours", particles_to_keep, newly_transformed_particles, get_random_free_particle);
+
+    //         }
+    //     })
+
+    //     // 3.3 Asign the secondary
+
+    //     // For all the neigbours of the staged nodes
+    //     this.context.staged_nodes['secondary'].forEach(node => {
+
+    //         // Is this neighbour node already present in the particles to keep?
+    //         let secondary_already_in_keep = particles_to_keep.some(particle => particle.userData.db_node.record_id == node.record_id);
+
+    //         // If not, push the first empty particle to be transformed to the newly transformed particles, then remove that particle from the empty_particles_to_be_transformed. And transform it to local state.
+    //         if(!secondary_already_in_keep){
+
+    //             // Asign the secondary
+    //             assign_particles(node, "secondary", particles_to_keep, newly_transformed_particles, get_random_free_particle);
+    //         }
+    //     })
+
+    //     console.log("newly transformed particles: ", newly_transformed_particles)
+
+    //     // Add the newly transformed particles and the particles to keep to redefine the local network
+    //     this.context.local_network_particles = newly_transformed_particles.concat(particles_to_keep);
+
+    //     // filter all the viz particles that are not present in the local network particles
+    //     let particles_to_set_free = this.context.viz_particles.filter(particle => this.context.local_network_particles.indexOf(particle) !== -1);
+    //     particles_to_set_free.forEach(particle => particle.set_state("free"));
+
+    //     // 5. Reset the targets
+    //     this.context.local_network_particles.forEach(particle => particle.state.target_set = false);
+
+    
+
+    // }
+
+    // Set the arrive target for an individual particle, depending on its state and db node.
+    // set_particle_initial_target(selected_particle){
+
+    //     // If the particle doesn't have a db node, return
+    //     if(!selected_particle.userData.db_node && selected_particle.state.get_label() != "local"){return;}
+
+    //     // Set the target based on the place in stage flag
+    //     switch(selected_particle.userData.place_in_stage){
+    //         case "focused":
+    //             // center
+    //             selected_particle.userData.initial_target = createVector(innerWidth/2, innerHeight/2);
+    //             break;
+    //         case "neighbours":
+    //             // Filter the viz particle with userData.place_in_stage == "focused"
+    //             let focused_particle = this.context.viz_particles.filter(particle => particle.userData.place_in_stage == "focused")[0];
+
+    //             // Set the target
+    //             //selected_particle.userData.initial_target = focused_particle.pos;
+    //             focused_particle.state.ask_for_target(selected_particle);
+    //             break;
+
+    //         case "secondary":
+
+    //             // For the secondary, the target may change on the amount of present neighbours. If there's one present neighbor, the target will be the neighbor. If there's more than one present neighbor, it sould calculate the middle point between the neighbours.
+                
+    //             // Get the present neighbours
+    //             let present_neighbours = this.get_present_neighbours(selected_particle);
+
+    //             present_neighbours[0].state.ask_for_target(selected_particle);
+
+    //             // If there's only one present neighbor, set the target to the neighbor
+    //             // if(present_neighbours.length == 1){
+    //             //     //selected_particle.userData.initial_target = present_neighbours[0].pos;
+    //             // } else {
+
+    //             //     // If there's more than one present neighbor, set the target to the middle point between the neighbours
+    //             //     let sum_x = 0, sum_y = 0;
+    //             //     present_neighbours.forEach(particle => {
+    //             //         sum_x += particle.pos.x;
+    //             //         sum_y += particle.pos.y;
+
+    //             //     })
+    //             //     let middle_point = createVector(sum_x/present_neighbours.length, sum_y/present_neighbours.length);
+    //             //     selected_particle.userData.initial_target = middle_point;
+    //             // }
+
+    //             break;
+    //     }
 
 
  
-    }
+    // }
     
-    get_present_neighbors(particle){
+    get_present_neighbours(particle){
         
-        // Array with the present neighbors to return
+        // Array with the present neighbours to return
         let present_neighbours = [];	
 
         // Do the particle has a db node?
-        if(!particle.userData.db_node){return [];}
+        if(!particle.userData.db_node){console.log("no db node");return [];}
 
-        // Get the neighbors of the dbnode
-        let db_node_neighbors = particle.userData.db_node.get_neighbours();
+        // Get the neighbours of the dbnode
+        let db_node_neighbours = particle.userData.db_node.get_neighbours();
 
         // Push to the present neighbours array all the present neigbours in the stage
 
         // filter the focused particle
         let focused_particle = this.context.viz_particles.filter(particle => particle.userData.place_in_stage == "focused")[0];
-        // Is the focused particle's db node in the neighbors of the db node?
-        if(db_node_neighbors.includes(focused_particle.userData.db_node)){
+        // Is the focused particle's db node in the neighbours of the db node?
+        if(db_node_neighbours.includes(focused_particle.userData.db_node)){
             present_neighbours.push(focused_particle);
         }
 
-        // filter the neighbors
-        let neigbours = this.context.viz_particles.filter(particle => particle.userData.place_in_stage == "neighbors");
-        // Is the focused particle's db node in the neighbors of the db node?
+        // filter the neighbours
+        let neigbours = this.context.viz_particles.filter(particle => particle.userData.place_in_stage == "neighbours");
+        // Is the focused particle's db node in the neighbours of the db node?
         neigbours.forEach(particle => {
-            if(db_node_neighbors.includes(particle.userData.db_node)){
+            if(db_node_neighbours.includes(particle.userData.db_node)){
                 present_neighbours.push(particle);
             }
         })
 
         // filter the secondary
         let secondary = this.context.viz_particles.filter(particle => particle.userData.place_in_stage == "secondary");
-        // Is the focused particle's db node in the neighbors of the db node?
+        // Is the focused particle's db node in the neighbours of the db node?
         secondary.forEach(particle => {
-            if(db_node_neighbors.includes(particle.userData.db_node)){
+            if(db_node_neighbours.includes(particle.userData.db_node)){
                 present_neighbours.push(particle);
             }
         })
@@ -562,24 +1146,38 @@ class StateStageLocal extends StageState {
 
     }
 
-    // Method called by particles to tell stage they're ready for the next particle.
-    ready_for_next_particle(previous_particle){
-        console.log("ready for next particle")
-
-        // Look for the index of the previous particle in this.local_network_particles
-        let index = this.local_network_particles.indexOf(previous_particle);
-
-        // If it's the last particle, return
-        if(index == this.local_network_particles.length - 1){
-            return;
-        } else {
-            // If it's not, set the next particle agent state to free
-            this.local_network_particles[index].state.agent_state = "locked"
-            this.local_network_particles[index + 1].state.agent_state = "free";
-
-        }
-
+    get_present_neighbours_for_secondary(particle){
+        let present_neighbours = [];
+        let db_node_neighbours = particle.userData.db_node.get_neighbours();
+        // From the local network, filter the neighbours and secondary
+        let possible_particles = this.local_particles.filter(particle => particle.userData.place_in_stage == "neighbours" || particle.userData.place_in_stage == "secondary");
+        // If the db node is in the possible particles, add it to the present neighbours
+        possible_particles.forEach(particle => {
+            if(db_node_neighbours.includes(particle.userData.db_node)){
+                present_neighbours.push(particle);
+            }
+        })
+        return present_neighbours;
     }
+
+    // Method called by particles to tell stage they're ready for the next particle.
+    // ready_for_next_particle(previous_particle){
+    //     console.log("ready for next particle")
+
+    //     // Look for the index of the previous particle in this.local_network_particles
+    //     let index = this.local_network_particles.indexOf(previous_particle);
+
+    //     // If it's the last particle, return
+    //     if(index == this.local_network_particles.length - 1){
+    //         return;
+    //     } else {
+    //         // If it's not, set the next particle agent state to free
+    //         this.local_network_particles[index].state.agent_state = "locked"
+    //         this.local_network_particles[index + 1].state.agent_state = "free";
+
+    //     }
+
+    // }
 
 
 }
@@ -649,18 +1247,25 @@ class VizParticle {
 
     // TODO: This needs to be rewritten.
     show_edges(){
-        // get the present neighbors
-        let present_neighbors = this.context.state.get_present_neighbors(this);
-        //console.log(present_neighbors)
-        push();
 
-        // for each neighbor, draw a line to it
-        present_neighbors.forEach(neighbor => {
-            stroke(0,20);
-            line(this.pos.x, this.pos.y, neighbor.pos.x, neighbor.pos.y);
-        })
+        
+            // get the present neighbours
+            let present_neighbours = this.context.state.get_present_neighbours(this);
 
-        pop();
+            // if there are no neighbours, return
+            if(present_neighbours.length == 0){
+                return;
+            }
+            //console.log(present_neighbours)
+            push();
+
+            // for each neighbor, draw a line to it
+            present_neighbours.forEach(neighbor => {
+                stroke(0, 20);
+                line(this.pos.x, this.pos.y, neighbor.pos.x, neighbor.pos.y);
+            })
+
+            pop();
     }
 
     set_label(label_string){
@@ -775,7 +1380,7 @@ class VizParticle {
     set_state(state_key){
         
         // Keep the old state if there's one
-        if(this.state != null){this.old_state = this.state;}
+        // if(this.state != null){this.old_state = this.state;}
         
         // If there's a state already and its locked, break the function
         if(this.state != null && this.state.it_is_locked()){return;}
@@ -952,6 +1557,8 @@ class VizParticleState {
         this.cascade = false;
     }
 
+
+
 }
 
 class VizParticleStateLocal extends VizParticleState {
@@ -965,13 +1572,15 @@ class VizParticleStateLocal extends VizParticleState {
         this.internal_perception  = this.context.perception-20;
 
         // Agent state
-        this.agent_state = 'waiting' // Can be free, locked or waiting.
+        this.agent_state = 'free' // Can be free, locked or waiting.
         this.agent_collision = []; // References for colliding agents
+        this.can_update = true;
 
         this.target_set = false;
+
         this.target = {
             'host': [],
-            'guest': []
+            'guest': null
         }
 
 
@@ -981,95 +1590,90 @@ class VizParticleStateLocal extends VizParticleState {
        // this.set_target(context);
     }
 
-    update(){
-        
-        // If this is the first time update is called, call this.set_target
-        if(!this.target_set){
-            this.set_target(this.context);
-        }
+    update() {
 
+        // if(this.can_update){
+       
 
+            this.inject_data();
 
-        this.inject_data();
-
-        // Move to target     
-        let steering = this.context.arrive(this.target.guest.pos);
-        this.context.applyForce(steering);
-
-
-        // If the maxSpeed is 0, call the next particle
-         if(this.context.maxSpeed < 0.1){
-        //     // Lock the particle
-             this.agent_state = 'locked';
-         }
-
-        // If the particle is host for a target, update it
-        if(this.target.host.length > 0){
-            
-            // For all the host particles, call update
-            for(let host of this.target.host){
-                host.update();
+            // Move to target     
+            if (this.target.guest != null) {
+                // console.log("helpoooodasf", this.context.label)
+                let steering = this.context.arrive(this.target.guest.pos);
+                this.context.applyForce(steering);
             }
-        }
 
+            // If the particle is host for a target, update it
+            if (this.target.host.length > 0) {
 
-        // update the physics
-        this.context.update_physics();
-           
-        // Show
-        
-        
-        
-        this.context.show_edges();
-        this.context.show_ellipse();
-        
-        if(this.show_label){this.context.show_label();}
-        
-        this.show_agent_debug();
-           
-        // Cascade 
-        if(this.cascade == true){
-            this.context.ripple_out(10);
-            this.context.cascade_state(this.label, 10);}
+                // For all the host particles, call update
+                for (let host of this.target.host) {
+                    host.update();
+                }
+            }
+            this.context.show_edges();
+
+            // update the physics
+            this.context.update_physics();
+
+            // Show
+            //this.context.show_edges();
+            this.context.show_ellipse();
+
+            if (this.show_label) { this.context.show_label(); }
+
+            this.show_agent_debug();
+
+            // Cascade 
+            if (this.cascade == true) {
+                this.context.ripple_out(10);
+                this.context.cascade_state(this.label, 10);
+            }
+        // }
 
     }
 
     get_place_in_stage(){
         return this.context.userData.place_in_stage;
     }
+
     // Sets the target for the particle to move on. It ouputs a target object referenced in the guest.
-    set_target(host_particle){
+    // set_target(host_particle){
 
-        // 1. If the particle doesn't have a db node, return
-        //console.log(this.context.userData.db_node.get_label());
+    //     // 1. If there are targets present in the particle, clear them
+    //     // 1.1 Remove host
+    //     this.target.host = [];
+    //     //1.2 Remove guest
+    //     this.target.guest = null;
 
-        // 2. Set the target based on the place in stage flag
-        //console.log(host_particle.state);
-        switch(this.context.userData.place_in_stage){
-            case "focused":
-                // center
-                // create a target whose guest and host are the same
-                this.target.host.push(new VizTarget(this.context,this.context));
-                break;
+    //     // 2. Set the target based on the place in stage flag
+    //     //console.log(host_particle.state);
+    //     switch(this.context.userData.place_in_stage){
+    //         case "focused":
+    //             // center
+    //             // create a target whose guest and host are the same
+    //             this.target.host.push(new VizTarget(this.context,this.context));
+    //             break;
 
-            case "neighbors":
-                // Filter the first viz particle with userData.place_in_stage == "focused"
-                let focused_particle = this.context.context.viz_particles.filter(particle => particle.userData.place_in_stage == "focused")[0];
-                // Create a target
-                focused_particle.state.ask_for_target(this.context);
-                break;
+    //         case "neighbours":
+    //             // Filter the first viz particle with userData.place_in_stage == "focused"
+    //             let focused_particle = this.context.context.viz_particles.filter(particle => particle.userData.place_in_stage == "focused")[0];
+    //             // Create a target
+    //             focused_particle.state.ask_for_target(this.context);
+    //             break;
 
-            case "secondary":
-                let present_neighbours = host_particle.context.state.get_present_neighbors(this.context);
-                present_neighbours[0].state.ask_for_target(this.context);
-                break;
+    //         case "secondary":
+    //             let present_neighbours = host_particle.context.state.get_present_neighbours(this.context);
+    //             if(present_neighbours.length > 0) {present_neighbours[0].state.ask_for_target(this.context)};
+    //             break;
 
 
-        }
+    //     }
 
-        this.target_set = true;
+    //     this.target_set = true;
 
-    }
+    // }
 
 
     show_agent_debug(){
@@ -1092,7 +1696,7 @@ class VizParticleStateLocal extends VizParticleState {
             case 'focused':
                 this.color = [0,0,255];
                 break;
-            case 'neighbors':
+            case 'neighbours':
                 this.color = [60,60,60];
                 break;
             case 'secondary':
@@ -1105,31 +1709,31 @@ class VizParticleStateLocal extends VizParticleState {
         // pop()
     }
 
-    check_collisions_with_agents(external_perception = true){
-        let perception_ring;
-        if(external_perception == true){
-            perception_ring = this.external_perception;
-        }else {
-            perception_ring = this.internal_perception;}
-        // Query the quadtree points in that boundary to get all collsion results
-        let collision = this.context.get_collision(perception_ring, 'circle');
-        //console.log(collision)
-        // Filter the particles that are in local state
-        collision = collision.filter(particle => particle.userData.state.get_label() == 'local');
+    // check_collisions_with_agents(external_perception = true){
+    //     let perception_ring;
+    //     if(external_perception == true){
+    //         perception_ring = this.external_perception;
+    //     }else {
+    //         perception_ring = this.internal_perception;}
+    //     // Query the quadtree points in that boundary to get all collsion results
+    //     let collision = this.context.get_collision(perception_ring, 'circle');
+    //     //console.log(collision)
+    //     // Filter the particles that are in local state
+    //     collision = collision.filter(particle => particle.userData.state.get_label() == 'local');
 
-        // Sort the collision results from the nearest to the farthest
-        collision.sort((a,b) => {
-            return p5.Vector.dist(this.context.pos, a.userData.pos) - p5.Vector.dist(this.context.pos, b.userData.pos);
-        })
+    //     // Sort the collision results from the nearest to the farthest
+    //     collision.sort((a,b) => {
+    //         return p5.Vector.dist(this.context.pos, a.userData.pos) - p5.Vector.dist(this.context.pos, b.userData.pos);
+    //     })
 
-        // Filter the particles whose agent state is locked
-        //collision = collision.filter(particle => particle.userData.state.agent_state == 'locked');
+    //     // Filter the particles whose agent state is locked
+    //     //collision = collision.filter(particle => particle.userData.state.agent_state == 'locked');
 
-        // Return the results
-        //console.log("collisions", collision.length)
-        return collision;
+    //     // Return the results
+    //     //console.log("collisions", collision.length)
+    //     return collision;
 
-    }
+    // }
 
     arrive(target) {
         // 2nd argument true enables the arrival behavior
@@ -1168,51 +1772,45 @@ class VizParticleStateLocal extends VizParticleState {
         return force_to_target;
       }
 
-    calculate_collision_middlepoint(){
-        if(this.agent_collision.length > 0){
+    // calculate_collision_middlepoint(){
+    //     if(this.agent_collision.length > 0){
 
-            let pos_array = this.agent_collision;
-            let totalPuntos = pos_array.length;
+    //         let pos_array = this.agent_collision;
+    //         let totalPuntos = pos_array.length;
             
-            if (totalPuntos === 0) {
-            // Manejo de caso especial si no hay puntos
-            return null;
-            }
+    //         if (totalPuntos === 0) {
+    //         // Manejo de caso especial si no hay puntos
+    //         return null;
+    //         }
         
-            // Inicializar sumas
-            var sumaX = 0;
-            var sumaY = 0;
+    //         // Inicializar sumas
+    //         var sumaX = 0;
+    //         var sumaY = 0;
         
-            // Sumar las coordenadas de todos los puntos
-            for (var i = 0; i < totalPuntos; i++) {
-            sumaX += pos_array[i].userData.pos.x;
-            sumaY += pos_array[i].userData.pos.y;
-            }
+    //         // Sumar las coordenadas de todos los puntos
+    //         for (var i = 0; i < totalPuntos; i++) {
+    //         sumaX += pos_array[i].userData.pos.x;
+    //         sumaY += pos_array[i].userData.pos.y;
+    //         }
         
-            // Calcular el punto medio
-            var puntoMedioX = sumaX / totalPuntos;
-            var puntoMedioY = sumaY / totalPuntos;
+    //         // Calcular el punto medio
+    //         var puntoMedioX = sumaX / totalPuntos;
+    //         var puntoMedioY = sumaY / totalPuntos;
         
-            //return { x: puntoMedioX, y: puntoMedioY };
-            return createVector(puntoMedioX,puntoMedioY);
-    }}
+    //         //return { x: puntoMedioX, y: puntoMedioY };
+    //         return createVector(puntoMedioX,puntoMedioY);
+    // }}
 
-    // This is ment to be called from the guest particle to set a targetfrom this host particle
-    ask_for_target(guest_particle){
-        
-        //console.log("asking for target")
-        // Make a new target object in the host slot
-        this.target.host.push(new VizTarget(this.context, guest_particle));
-      
-    }
 
     inject_data(){
 
         switch(this.context.userData.place_in_stage){
             case "focused":
+                this.context.set_radius(12);
                 this.show_label = true;
                 break;
-            case "neighbors":
+            case "neighbours":
+                this.context.set_radius(8);
                 this.show_label = true;
                 break;
             case "secondary":
@@ -1221,6 +1819,67 @@ class VizParticleStateLocal extends VizParticleState {
                 break;
         }
     }
+
+    // to be called from stage state local when there is a change in the stages nodes
+    // refocus(){
+        
+    //     // Subfunction definition
+    //     const evauluate_on_new_scenario = () => {
+    //         let particle_record_id = this.context.userData.db_node.record_id;
+    //         let staged_nodes = this.context.context.staged_nodes;
+    //         let found_place = null;
+
+    //         // Is particle db node on the focused node?
+    //         let is_focused = particle_record_id == staged_nodes.focused.record_id;
+    //         if(is_focused){
+    //             found_place = "focused"; 
+    //             console.log("FOCUSED IS", this.context);
+            
+    //         } else if (found_place == null){ 
+
+    //             // Is particle db node on the neigbours? some
+    //             staged_nodes.neighbours.forEach(element => {
+    //                 if(particle_record_id == element.record_id){
+    //                     found_place = "neighbours";
+    //                 }
+    //             })
+    //         } else if (found_place == null){
+    //             // Is particle db node on the secondary? some
+    //             staged_nodes.secondary.forEach(element => {
+    //                 if(particle_record_id == element.record_id){
+    //                     found_place = "secondary";
+    //                 }
+    //             })
+    //         }
+ 
+
+    //         // If wasn't found anywhere, return "freed"
+    //         if(found_place == null){
+    //             return "freed";
+    //         } else {
+    //             return found_place;
+    //         }
+        
+    //     }
+    //     const asnswer_stage = (new_position) => {
+    //         let array_to_answer = this.context.context.state.refocus_particle_answer;
+    //         if (new_position == "focused" || new_position == "neighbours" || new_position == "secondary") {
+    //             array_to_answer['moved'].push({ 'particle': this.context, 'new_position': new_position });
+    //         } else if (new_position == "freed") {
+    //             array_to_answer['freed'].push(this.context);
+    //         }
+    //     }
+ 
+    //     // 1. Evaluate position on stage
+    //     let new_position_in_stage = evauluate_on_new_scenario();
+    //     // Set position on stage on the userData
+    //     this.context.userData.place_in_stage = new_position_in_stage;
+    //     console.log("new position in stage for ", this.context.label, new_position_in_stage);
+        
+    //     // 2. Answer to stage
+    //     asnswer_stage(new_position_in_stage);
+
+    // }
 
 
 
@@ -1232,6 +1891,7 @@ class VizParticleStateFree extends VizParticleState {
         this.color = [170,170,170];
         this.set_label("free");
         this.variation = 1;
+        this.context.clean_user_data();
     }
 
 
@@ -1243,9 +1903,9 @@ class VizParticleStateFree extends VizParticleState {
         this.inject_data();
         this.context.random_walk();
         this.context.show_ellipse();
-        if(this.cascade == true){
-            this.context.ripple_out(10);
-            this.context.cascade_state(this.label, 10);}
+        // if(this.cascade == true){
+        //     this.context.ripple_out(10);
+        //     this.context.cascade_state(this.label, 10);}
     }
 }
 
@@ -1287,7 +1947,7 @@ class VizTarget{
         this.pos = p5.Vector.add(this.host_particle.pos, this.random_vector);
         }
 
-        //this.show_debug();
+       // this.show_debug();
         
         
     }
@@ -1302,7 +1962,7 @@ class VizTarget{
          
 
         let separation_magnitude = 100;
-        if(this.guest_particle.userData.place_in_stage === "neighbors"){
+        if(this.guest_particle.userData.place_in_stage === "neighbours"){
 
             separation_magnitude = 200;
         }
@@ -1323,7 +1983,9 @@ class VizTarget{
             let angle =  this.host_particle.userData.angle_counter;
 
             // set the number multiply divide by
-            let number_to_multiply = 350/this.host_particle.context.staged_nodes['neighbors'].length;
+            let number_to_multiply = 350/this.host_particle.context.state.staged_nodes['neighbours'].length;
+            console.log("number to multiply", number_to_multiply)
+            //let number_to_multiply = 350/this.host_particle.context.staged_nodes['neighbours'].length;
 
             random_point.setHeading(radians(angle*number_to_multiply));
              return random_point;

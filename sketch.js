@@ -37,6 +37,8 @@ function preload() {
   }
   
 
+let dat_gui;
+
 function setup(){
 
     // Initialize the local database
@@ -53,6 +55,23 @@ function setup(){
     // Dat.gui controls
     //color_controls = new dat.GUI();
 	  //color_controls.add(bkg_color, 'r', 0, 255);
+    let colors = {r : 0};
+    dat_gui = new dat.GUI();
+
+  let gui_functions = {}
+  gui_functions['Toggle states'] = function () { test_change_state(); };
+  gui_functions['Change particle'] = function () {
+    if (viz.stage.state.get_label() == 'local') {
+      let random_record_id = localdb.get_random_record_id();
+      viz.stage.state.transform_local_network(random_record_id);
+    }
+  };
+  //
+    dat_gui.add(gui_functions, 'Toggle states');
+    dat_gui.add(gui_functions, 'Change particle');
+
+  // dat_gui.add(colors, 'r', 0, 255);
+    
 
 }
 
@@ -78,7 +97,12 @@ function windowResized() {
   let selected_state = 0;
 
   function mouseReleased() {
-    console.log("clicked");
+    
+
+  }
+
+  function test_change_state() {
+
 
     // let i = parseInt(random(0, viz.stage.viz_particles.length));
 
@@ -98,7 +122,7 @@ function windowResized() {
     }else{
       selected_state = 0;
     }
-
+   
   }
 
   

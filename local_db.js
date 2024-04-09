@@ -199,7 +199,19 @@ class LocalDB {
     getNodesAsArray(arrayname){
         return Object.values(this.arrayname);
      
-     }
+    }
+
+    get_random_record_id(){
+
+        
+        // Pick randomly the kind of node.
+        let node_arrays = [this.constituents_nodes, this.exhibition_nodes, this.membership_nodes, this.years_nodes];
+        let random_array = node_arrays[parseInt(random(node_arrays.length))];
+        let random_node = random_array[parseInt(random(random_array.length))];
+        let random_record_id = random_node.record_id;
+        return random_record_id;
+
+    }
 
 
 
