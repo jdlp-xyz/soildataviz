@@ -188,6 +188,9 @@ class Stage {
                 this.state = new StateStageLocal(this, "reckeeM7EPI7SOsGF") // for testing only
                 console.log("changed state to:", this.state);
                 break;
+            case 'global':
+                this.state = new StateStageGlobal(this);
+                break;
             default:
                 this.state = new StateStageFree(this)
                 break;
@@ -360,7 +363,7 @@ class StateStageLocal extends StageState {
 
             // For the focused particle, the target is itself
             let focused_particle = this.local_particles[0];
-            let focused_target = new VizTarget(this.local_particles[0], this.local_particles[0]);
+            let focused_target = new VizTargetLocal(this.local_particles[0], this.local_particles[0]);
             focused_particle.state.target.host.push(focused_target);
             focused_particle.state.target.guest = focused_target;
 
@@ -368,7 +371,7 @@ class StateStageLocal extends StageState {
             // Filter the neibours
             let neigbours = this.local_particles.filter(p => p.userData.place_in_stage == "neighbours");
             for(let i = 0; i < neigbours.length; i++){
-                let target = new VizTarget(this.local_particles[0], neigbours[i]);
+                let target = new VizTargetLocal(this.local_particles[0], neigbours[i]);
                 // Referencing the target in the host
                 this.local_particles[0].state.target.host.push(target);
                 neigbours[i].state.target.guest = target;
@@ -383,7 +386,7 @@ class StateStageLocal extends StageState {
                 let particle_first_neighbour = secondary[i].context.state.get_present_neighbours_for_secondary(secondary[i])[0];
 
                 console.log("particle_first_neigbour",particle_first_neighbour)
-                let target = new VizTarget(particle_first_neighbour, secondary[i]);
+                let target = new VizTargetLocal(particle_first_neighbour, secondary[i]);
                 particle_first_neighbour.state.target.host.push(target);
                 secondary[i].state.target.guest = target;
             }
@@ -1182,7 +1185,59 @@ class StateStageLocal extends StageState {
 
 }
 
+class StateStageGlobal extends StageState {
 
+    constructor(context){
+        console.log("initiating global state");
+        super(context);
+        this.targets = []; // Targets for the global stage
+        this.timeline = new TimelineGlobal(this);
+        this.targets_quadtree = new QuadTree(new Rectangle(innerWidth/2, innerHeight/2, innerWidth, innerHeight),4);
+    }
+    update() {
+        
+        this.update_target_quadtree();
+        this.update_targets();
+        
+        // simply passes the update function to each viz particle
+        // this will change as there will be diferent layers of particles that need to be rendered in a particular order.
+        for(let i = 0; i < this.context.viz_particles.length; i++){
+            this.context.viz_particles[i].update();
+        }
+
+        
+        // For testing
+        this.update_timeline();
+        
+
+    }
+
+    update_targets(){
+        // Update targets
+        if(this.targets.length > 0){this.targets.forEach(target => target.update());}
+    }
+
+    update_target_quadtree(){
+        // Update quadtree
+        this.targets_quadtree.clear();
+        // For each target create a point and insert it in the quadtree
+        if(this.targets.length > 0){
+            for(let i = 0; i < this.targets.length; i++){
+
+                let point = new Point(this.targets[i].pos.x, this.targets[i].pos.y, this.targets[i]);
+
+                this.targets_quadtree.insert(point);
+            }
+         }
+    }
+
+    // builds the timeline for the global state. Ment to be called from the constructor.
+
+
+    update_timeline(){
+        this.timeline.update();
+    }
+}
 
 // Visualization node
 class VizParticle {
@@ -1911,7 +1966,7 @@ class VizParticleStateFree extends VizParticleState {
 
 // VizTarget
 // viz target are aides and constraints for the composition of particles
-class VizTarget{
+class VizTargetLocal{
     constructor(host, guest){
 
         // Defining the particles
@@ -2063,3 +2118,164 @@ return true;
 
 
     }
+
+// Viz Target class to use in the global stage state
+// This kind of target lives independently of the particles, it is hosted on the stage state.
+class VizTargetGlobal {
+    constructor(context, posx, posy, user_data) {
+        
+        this.context = context; // State stage object where the target is located
+        this.stage = this.context.context; // This is not a 
+        this.targets = this.context.targets
+
+        this.particle = null; // Reference to the particle hosted by the target.
+        
+        this.pos = createVector(posx, posy);
+        this.vel = createVector(0,0);
+        this.acc = createVector(0,0);
+        this.radius = 10;
+        this.maxSpeed = 10;
+        this.maxForce = 0.4;
+        this.perception = 100;
+
+        this.userData = user_data;
+        
+    }
+
+    update_physics() {
+        this.vel.add(this.acc);
+        this.vel.limit(this.maxSpeed);
+        this.pos.add(this.vel);
+        this.acc.set(0, 0);
+    }
+
+    update() {
+        
+        // Forces
+        // Update the physics
+        this.update_physics();
+        // Show
+        this.show_debug();
+
+    }
+
+    show_debug() {
+
+        if(debug){
+            push();
+                // center
+                fill('pink');
+                noStroke();
+                ellipse(this.pos.x, this.pos.y, 3, 3);
+            pop();
+            push();
+                // Perception
+                stroke('pink');
+                noFill();
+                ellipse(this.pos.x, this.pos.y, this.perception, this.perception);
+            pop();
+        }
+    }
+}
+
+class TimelineGlobal{
+
+    // TODO this composition must change regarding the modificatons in screen size. This is a object to render in global view, where maybe we're going to implement grab screen or something that allows to zoom in and out.
+    constructor(context){
+        this.context = context; // State stage global
+        this.margin_horizontal = 80;
+        this.margin_vertical = 80;
+        this.curve_tightness = 1;
+        this.start_point = createVector(lerp(0,width,0.15),lerp(0,height,0.15));
+        
+        this.targets = [];
+        this.end_point = createVector(width - this.margin_horizontal, height - this.margin_vertical);
+        
+
+        this.years_reference = ["1995", "1996", "1997", "1998", "1999", "2000", "2001", "2002", "2003", "2004", "2005", "2006", "2007", "2008", "2009", "2010", "2011", "2012", "2013", "2014","2015", "2016", "2017", "2018", "2019", "2020", "2021", "2022", "2023", "2024"];
+        
+        this.points_amount = this.years_reference.length*12;
+        this.build_timeline();
+        this.reference_targets_on_stage();
+
+    }
+
+    update(){
+        // Targets are being updated in the state stage.
+    }
+
+    // builds the timeline points in a curve
+    build_timeline(){
+
+        // Define subfunctions
+        const calculate_curve = (index) => {
+            
+            // Check if the screen is vertical or horizontal
+            // TODO: This should be managed more centrally at some point.
+            let screen_orientation = innerWidth > innerHeight;
+            console.log("screen is" +screen_orientation);
+            let x, y;
+
+            if (screen_orientation == true) {
+                // Make a horizontal curve
+                y = lerp(0, height, map(sin(index / (this.points_amount / 6.5)), 0, 1, 0.5, 0.9));
+                x = lerp(0, width, map(index, -30, this.points_amount + 30, 0, 1))
+            } else {
+                // Make a vertical curve
+                x = lerp(0, width, map(sin(index / (this.points_amount / 7.5)), 0, 1, 0.5, 0.9));
+                y = lerp(0, height, map(index, -30, this.points_amount + 30, 0, 1))
+            }
+
+
+            return {x, y};
+        }
+
+        // Excecution
+        // 1. Make the targets for each month and year in the timeline.
+        let month_counter = 1;
+        let year_counter = parseInt(this.years_reference[0]);
+
+        for (let i = 0; i < this.points_amount; i++){
+
+            // Calculate positions to create a sin curve
+            let curve = calculate_curve(i);
+            let x = curve.x;
+            let y = curve.y;
+            
+                let userData = {
+                    'timeline': {
+                        'year': year_counter,
+                        'month': month_counter
+                    }
+                }
+                
+                let new_target = new VizTargetGlobal(this, x, y, userData);
+                this.targets.push(new_target);
+                month_counter++;
+            
+
+            if (month_counter > 12){
+                month_counter = 1;
+                year_counter++;
+            }
+
+
+        }
+
+        // 2. Call particles to render the targets.
+        // TODO: Call particles to render the targets!
+
+
+    }
+
+    // After the timeline targets are built, we need to reference them on the stage
+    reference_targets_on_stage() {
+        
+        if(this.targets.length > 0){
+            
+            this.targets.forEach(target => this.context.targets.push(target));
+            
+        }
+
+    }
+}

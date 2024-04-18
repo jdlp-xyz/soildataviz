@@ -94,22 +94,19 @@ function windowResized() {
     resizeCanvas(windowWidth, windowHeight);
   }
 
-  let selected_state = 0;
+ 
 
   function mouseReleased() {
     
 
   }
 
+
+  let selected_state = 0;
   function test_change_state() {
 
 
-    // let i = parseInt(random(0, viz.stage.viz_particles.length));
-
-    // viz.stage.viz_particles[i].set_state('red');
-    // viz.stage.viz_particles[i].state.set_cascade();
-
-    let possible_states = ['local','free'];
+    let possible_states = ['global', 'free', 'local','free'];
     
     // Toggle the state
     
@@ -117,11 +114,14 @@ function windowResized() {
     viz.stage.set_stage_state(possible_states[selected_state]);
     
     // move the selected state one step
-    if(selected_state == 0){
-      selected_state = 1;
-    }else{
-      selected_state = 0;
-    }
+    // if(selected_state == 0){
+    //   selected_state = 1;
+    // }else{
+    //   selected_state = 0;
+    // }
+
+    if(selected_state < possible_states.length - 1){
+      selected_state++;} else { selected_state = 0;}
    
   }
 
