@@ -18,7 +18,7 @@ let bkg_color;
 // Create a local object db
 let localdb;
 // create variables to store the local data that will be loaded.
-let localdata_constituents, localdata_exhibitions, localdata_memberships;
+let localdata_constituents, localdata_exhibitions, localdata_memberships, colors;
 
 // Preloading the fonts for the visualizarion from a local directory.
 // TODO include the local json or csv with the local database.
@@ -33,33 +33,46 @@ function preload() {
     localdata_constituents = loadJSON('./data/constituents.json');
     localdata_exhibitions = loadJSON('./data/exhibitions.json');
     localdata_memberships = loadJSON('./data/membership.json');
+    colors = loadJSON('./colors.json');
 
   }
+
+
+  // let colors = {'main': [0, 255, 0], 
+                // 'secondart': [0, 0, 255]};
   
+function export_colors_to_json() {
+      // creates a file called 'newFile.txt'
+    let writer = createWriter('colors.json');
+    // write 'Hello world!'' to the file
+    writer.write(JSON.stringify(colors));
+    // close the PrintWriter and save the file
+    writer.close();
+}
 
 let dat_gui;
 
-function setup(){
+function setup() {
 
-    // Initialize the local database
-    localdb = new LocalDB();
-    viz = new Viz(localdb);
+  // Initialize the local database
+  localdb = new LocalDB();
+  viz = new Viz(localdb);
 
-    // Create canvas
-    // TODO Make the canvas rezisable and adaptable to different screens.
-    createCanvas(windowWidth, windowHeight);
+  // Create canvas
+  // TODO Make the canvas rezisable and adaptable to different screens.
+  createCanvas(windowWidth, windowHeight);
 
-    // Secuence of functions to initialize the local database before drawing the network.
-    // The last method builds the visualization, after the local database is ready.
+  // Secuence of functions to initialize the local database before drawing the network.
+  // The last method builds the visualization, after the local database is ready.
 
-    // Dat.gui controls
-    //color_controls = new dat.GUI();
-	  //color_controls.add(bkg_color, 'r', 0, 255);
-    let colors = {r : 0};
-    dat_gui = new dat.GUI();
+  // Dat.gui controls
+  //color_controls = new dat.GUI();
+  //color_controls.add(bkg_color, 'r', 0, 255);
+  dat_gui = new dat.GUI();
 
   let gui_functions = {}
   gui_functions['Toggle states'] = function () { test_change_state(); };
+  gui_functions['Export colors'] = function () { export_colors_to_json(); };
   gui_functions['Change particle'] = function () {
     if (viz.stage.state.get_label() == 'local') {
       let random_record_id = localdb.get_random_record_id();
@@ -67,11 +80,17 @@ function setup(){
     }
   };
   //
-    dat_gui.add(gui_functions, 'Toggle states');
-    dat_gui.add(gui_functions, 'Change particle');
+  dat_gui.add(gui_functions, 'Toggle states');
+  dat_gui.add(gui_functions, 'Change particle');
+  let color_gui_folder = dat_gui.addFolder('Colors');
 
-  // dat_gui.add(colors, 'r', 0, 255);
-    
+  for(let key in colors){
+    color_gui_folder.addColor(colors, key);
+  }
+  color_gui_folder.add(gui_functions, 'Export colors');
+  // color_gui_folder.addColor(colors, 'main');
+  
+
 
 }
 
@@ -82,7 +101,7 @@ function draw(){
     // define center point for testing.
     center_point = createVector(width/2, height/2);
 
-    background(150)
+    background(colors.background)
     if(localdb.is_ready){
 
       viz.update();

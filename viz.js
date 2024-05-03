@@ -12,7 +12,16 @@ class Viz {
     this.stage.update();
 
   }
-}
+
+  get_screen_orientation() {
+    let screen_orientation = innerWidth > innerHeight;
+    if(screen_orientation == true){
+        return 'horizontal';} else {
+        return 'vertical';}
+        
+    }
+  }
+
 
 class Stage {
     constructor(context, localdb) {
@@ -39,6 +48,11 @@ class Stage {
         // State of the stage. It can be local, global and others implemented later.
         this.state = new StateStageFree(this);
         this.old_state = null;
+        this.baked_data = {
+            'node_targets' : {
+                'horizontal': [],
+                'vertical': [] }
+        }
         console.log("state:",this.state)
 
 
@@ -89,6 +103,34 @@ class Stage {
                 this.quadtree.insert(point);
             }
          }
+    }
+
+    // Method to bake the target positions of the node targets
+    bake_node_target_positions(){
+        
+        // Establish a place to store the target positions depending on the screen orientation
+        let place_to_store;
+        if(this.context.get_screen_orientation() == 'horizontal'){
+            place_to_store = this.baked_data.node_targets.horizontal;
+        } else { 
+            place_to_store = this.baked_data.node_targets.vertical;}
+        
+        // Node targets
+        let node_targets = this.state.targets.filter(target => target.userData.is_node_target == true);
+
+        for (let i = 0; i < node_targets.length; i++) {
+            
+            let target_info = {
+            'is_node_target': true,
+            'particle': null,
+            'db_node': node_targets[i].userData.db_node,
+            'target_pos': node_targets[i].pos,
+             }
+            
+            place_to_store.push(target_info);
+        }
+
+        console.log(place_to_store.length, " "+this.context.get_screen_orientation()+" node targets positions baked")
     }
 
     // This method will start a cascading to a new state of the particles. It ment to be called once.
@@ -1190,14 +1232,27 @@ class StateStageGlobal extends StageState {
     constructor(context){
         console.log("initiating global state");
         super(context);
+        this.node_target_perception = 70;
+        this.timeline_target_perception = 60;
+        
         this.targets = []; // Targets for the global stage
-        this.timeline = new TimelineGlobal(this);
+        this.screen_orientation = context.context.get_screen_orientation();
+        this.timeline = new TimelineGlobal(this,this.timeline_target_perception); // This creates all the targets for the timeline and adds to the target quadtree
+        // Refernces for the filtered db nodes
+        this.global_db_nodes = []; // Global db nodes to be rendered
+        this.filter_and_push_db_nodes(); // Get the filtered db nodes and references in global db nodes to call particles.
         this.targets_quadtree = new QuadTree(new Rectangle(innerWidth/2, innerHeight/2, innerWidth, innerHeight),4);
+        this.build_particle_targets();
+        //this.build_first_particle_target();
+        
+
+        console.log('target quadtree',this.targets_quadtree);
     }
     update() {
         
         this.update_target_quadtree();
         this.update_targets();
+        this.call_node_particles();
         
         // simply passes the update function to each viz particle
         // this will change as there will be diferent layers of particles that need to be rendered in a particular order.
@@ -1211,6 +1266,291 @@ class StateStageGlobal extends StageState {
         
 
     }
+
+    // Transform a random free particle to a global one
+    transform_particle = (record_id, target) => {
+
+        // Get a random free particle
+        let free_particles = this.context.viz_particles.filter(particle => particle.state.get_label() == "free");
+        let new_particle = free_particles[parseInt(random(free_particles.length))];
+        // Get a random free particle
+        // let new_particle = free_particle;
+
+        // change the particle's state to local
+        new_particle.state.unlock_state();
+        new_particle.set_state("global");
+
+        //asign the particle's db node
+        if(record_id != null){
+        let db_node = get_single_node_anywhere(record_id);
+        new_particle.userData.db_node = db_node;
+        // set the label
+        new_particle.label = db_node.get_label();
+
+        }
+
+        
+
+        // Set the guest target
+        new_particle.state.target.guest = target;
+
+        // set agent state to free
+        new_particle.state.agent_state = "free";
+
+        return new_particle;
+        
+    }
+    // To be called during update. If there are db node target without a particle, call a particle and cross reference in the target and the particle, changin its state to global_screen.
+    call_node_particles(){
+
+        // Subfunction transform the particle to global
+      
+        
+        // Get the particle targets
+        let particle_targets = this.get_particle_targets();
+       
+        // noLoop()
+
+        // Filter the particle targets that do not have a particle referenced
+        let targets_whithout_particles = particle_targets.filter(target => target.particle == null);
+       
+
+        // If there are targets without particles, call one particle
+        if(targets_whithout_particles.length > 0){
+
+            // Get the first target without a particle
+            let target = targets_whithout_particles[0];
+           
+            let target_db_node_record_id = target.userData.db_node.record_id;
+
+
+            
+            // Transform the particle to global
+            let transformed_particle = this.transform_particle(target_db_node_record_id, target);
+
+            // Reference the particle in the target
+            target.particle = transformed_particle;
+            
+
+        } else {
+            return;
+        }
+
+    }
+
+    build_particle_targets(){
+
+        // get the screen orientation
+        let screen_orientation = viz.get_screen_orientation();
+
+        // check if there are baked data for the screen orientation
+        let is_baked_data_available = this.check_baked_data(screen_orientation);
+
+        if(is_baked_data_available){
+            this.build_node_targets_from_baked_data();
+        } else {
+            this.build_first_particle_target();
+        }
+    }
+
+    build_node_targets_from_baked_data(){
+        console.log("building node targets from baked data")
+        // get the screen orientation
+        let screen_orientation = viz.get_screen_orientation();
+
+        // get the baked data
+        let baked_data;
+        if(screen_orientation == 'horizontal'){
+            baked_data = this.context.baked_data.node_targets.horizontal;
+        }
+
+        if(screen_orientation == 'vertical'){
+            baked_data = this.context.baked_data.node_targets.vertical;
+        }
+
+        // build the node targets
+        for(let i = 0; i < baked_data.length; i++){
+            this.build_particle_target(baked_data[i].db_node, true, {'posx': baked_data[i].target_pos.x, 'posy': baked_data[i].target_pos.y});
+        }
+    }
+
+    check_baked_data(screen_orientation){
+
+        if(screen_orientation == 'horizontal'){
+            let is_baked_data = this.context.baked_data.node_targets.horizontal.length > 0
+            return is_baked_data;
+        }
+
+        if(screen_orientation == 'vertical'){
+            let is_baked_data = this.context.baked_data.node_targets.vertical.length > 0
+            return is_baked_data;
+        }
+
+    }
+
+    get_particle_targets(){
+        return this.targets.filter(target => target.userData.is_node_target == true)
+    }
+
+    check_if_more_targets_needed(){
+        // Checks if there are more targets needed
+        
+        // Filter all the particle targets from the targets array
+        let node_targets = this.targets.filter(target => target.userData.is_node_target == true);
+        let more_target_are_needed = node_targets.length < this.global_db_nodes.length;
+        if(!more_target_are_needed){
+            console.log("no more targets needed. baking positions")
+            this.context.bake_node_target_positions();
+        };
+        // If the number of node targets is less than the number of db nodes, if so, return true
+        return more_target_are_needed;
+    }
+
+
+
+    build_particle_target(db_node, from_baked_data, aditional_data = {}){
+
+        let node_target;
+
+        if(from_baked_data){
+
+            let user_data = {
+                'is_node_target': true,
+                'particle': null,
+                'db_node': db_node, // here will be the particle
+            }
+            node_target = new VizTargetGlobal(this, aditional_data['posx'], aditional_data['posy'], this.node_target_perception, user_data);
+            // make the node target placement state 'placed'
+            node_target.placement_state = 'placed';
+
+        }
+        // If is not from baked data, build a random particle target
+        else {
+            let randomx = random(0, innerWidth);
+            let randomy = random(0, innerHeight);
+            let user_data = {
+                'is_node_target': true,
+                'particle': null,
+                'db_node': db_node, // here will be the particle
+            }
+            node_target = new VizTargetGlobal(this, randomx, randomy, this.node_target_perception, user_data);
+            
+        }
+
+        this.targets.push(node_target);
+    }
+
+    // To be called on constructor. A first particle target will be created and then pushed to the targets array
+    build_first_particle_target(){
+
+        this.build_particle_target(this.global_db_nodes[0], false);
+
+    }
+
+    // To be called from a node target when it's ready for the next node target. Calls the next node target
+    call_next_node_target(){
+
+        // console.log("call next node target")
+
+        // Check if there are more targets needed
+        if(this.check_if_more_targets_needed()){
+
+            let node_targets = this.targets.filter(target => target.userData.is_node_target == true);
+            let next_db_node_index = node_targets.length;
+            let next_db_node = this.global_db_nodes[next_db_node_index];
+            this.build_particle_target(next_db_node);
+        }
+        
+    }
+
+    filter_and_push_db_nodes(){
+
+        // Define localdb
+        const localdb = this.context.localdb;
+
+        // # 1. Constituents members sorted by membership nodes
+
+        // From the local db, filter all the constituents that have membership
+        const constituents_members = localdb.constituents_nodes.filter(constituent => constituent.membership_nodes.length > 0);
+        // Sort the constituents members by membership nodes length
+        constituents_members.sort(function(a, b) {
+            return b.membership_nodes.length - a.membership_nodes.length
+        })
+        // Push the constituents members to the global db nodes
+        constituents_members.forEach(constituent => {
+            this.global_db_nodes.push(constituent);
+        })
+
+        // // # 2. Exhibitions
+        // const exhibitions = localdb.exhibition_nodes;
+        // exhibitions.forEach(exhibition => {
+        //     this.global_db_nodes.push(exhibition);
+        // })
+    }
+
+    // This method, called at constructor, will build the targets for the timeline
+    // Deprecated, I will use the method from the first iterarion, building the targets one by one.
+    // build_particle_targets(){
+
+
+    //     const place_target_spaced_apart = (target_object, tries = 1) => {
+    //         // This recursive subfunction takes a target and places it in a random position, then checks if that position is colliding. If colliding, calls itself again with a new position
+
+    //         // Set random position
+    //         let x = random(0, innerWidth);
+    //         let y = random(0, innerHeight);
+
+    //         // Apply random position to target
+    //         target_object.pos.x = x;
+    //         target_object.pos.y = y;
+
+    //         // Add the target to the quadtree
+    //         this.update_target_quadtree();
+
+    //         // Check if colliding
+    //         let colission_results = target_object.check_collision_with_targets();
+
+    //         console.log('colission results', colission_results);
+
+    //         let is_colliding = colission_results.length > 0;
+
+    //         if(is_colliding && tries < 100){
+    //             tries++;
+    //             console.log("trying again", tries);
+    //             place_target_spaced_apart(target_object, tries);}
+    //         else{
+    //             if(tries == 100){
+    //                 console.log('could not place target');
+    //             }
+    //             return;
+    //         }
+    //     }
+    //     // Build random targets, each for a db node
+    //     let random_targets = [];
+
+    //     // EXCECUTION AREA
+
+    //     console.log(this.targets.length, 'number of targets');
+    //     //  for(let i = 0; i < 2; i++){
+    //     for(let i = 0; i < this.global_db_nodes.length; i++){
+    //        // console.log(i)
+    //         // Define random position, and data to mark it as node target
+    //         let user_data = {
+    //             'is_node_target': true,
+    //             'particle': null // here will be the particle
+    //         }
+    //         let target = new VizTargetGlobal(this, 0, 0, this.node_target_perception, user_data);
+    //         this.targets.push(target);
+    //        // console.log(this.targets.length, 'number of targets');
+    //         target.color = 'purple';
+    //         place_target_spaced_apart(target);
+
+    //         // Then push it to the targets
+            
+
+    //     }
+        
+    // }
 
     update_targets(){
         // Update targets
@@ -1228,7 +1568,12 @@ class StateStageGlobal extends StageState {
 
                 this.targets_quadtree.insert(point);
             }
+            
          }
+
+        // // return the number of point in the quadtree
+        // let points_in_quadtree = this.targets_quadtree.query(new Rectangle(innerWidth/2, innerHeight/2, innerWidth, innerHeight));
+        // console.log(points_in_quadtree.length, 'points in quadtree');
     }
 
     // builds the timeline for the global state. Ment to be called from the constructor.
@@ -1237,6 +1582,36 @@ class StateStageGlobal extends StageState {
     update_timeline(){
         this.timeline.update();
     }
+
+
+    get_present_neighbours(particle){
+        
+        // Array with the present neighbours to return
+        let present_neighbours = [];	
+
+        // Do the particle has a db node?
+        if(!particle.userData.db_node){console.log("no db node");return [];}
+
+        // Get the neighbours of the dbnode
+        let db_node_neighbours = particle.userData.db_node.get_neighbours();
+
+        // Get the present particles with db nodes
+        let particles_w_db_nodes = this.context.viz_particles.filter(particle => particle.userData.db_node != null || particle.userData.db_node != undefined);
+
+        particles_w_db_nodes.forEach(particle => {
+            
+            // Is this particle's db node in the neighbours of the db node?
+            if(db_node_neighbours.includes(particle.userData.db_node)){
+                present_neighbours.push(particle);
+            }
+        })
+
+        // Return the present neighbours
+        return present_neighbours;
+
+    }
+
+
 }
 
 // Visualization node
@@ -1303,24 +1678,26 @@ class VizParticle {
     // TODO: This needs to be rewritten.
     show_edges(){
 
-        
-            // get the present neighbours
-            let present_neighbours = this.context.state.get_present_neighbours(this);
+        if(this.userData.db_node != null){
+                // get the present neighbours
+                let present_neighbours = this.context.state.get_present_neighbours(this);
 
-            // if there are no neighbours, return
-            if(present_neighbours.length == 0){
-                return;
+                // if there are no neighbours, return
+                if(present_neighbours.length == 0){
+                    return;
+                }
+                //console.log(present_neighbours)
+                push();
+
+                // for each neighbor, draw a line to it
+                present_neighbours.forEach(neighbor => {
+                    stroke(0, 20);
+                    line(this.pos.x, this.pos.y, neighbor.pos.x, neighbor.pos.y);
+                })
+
+                pop();
             }
-            //console.log(present_neighbours)
-            push();
 
-            // for each neighbor, draw a line to it
-            present_neighbours.forEach(neighbor => {
-                stroke(0, 20);
-                line(this.pos.x, this.pos.y, neighbor.pos.x, neighbor.pos.y);
-            })
-
-            pop();
     }
 
     set_label(label_string){
@@ -1449,6 +1826,9 @@ class VizParticle {
                 break;
             case 'local':
                 this.state = new VizParticleStateLocal(this);
+                break;
+            case 'global':
+                this.state = new VizParticleStateGlobal(this);
                 break;
             default:
                 this.state = new VizParticleState(this);
@@ -1945,7 +2325,7 @@ class VizParticleStateFree extends VizParticleState {
         super(context);
         this.color = [170,170,170];
         this.set_label("free");
-        this.variation = 1;
+        this.variation = 10;
         this.context.clean_user_data();
     }
 
@@ -1962,6 +2342,166 @@ class VizParticleStateFree extends VizParticleState {
         //     this.context.ripple_out(10);
         //     this.context.cascade_state(this.label, 10);}
     }
+}
+
+
+// TODO For now, it's a copy of VizParticleStateLocal
+class VizParticleStateGlobal extends VizParticleState {
+
+    constructor(context){
+        super(context);
+        this.color = [0,0,255];
+        this.set_label("global");
+        this.variation = 0;
+
+        this.external_perception = this.context.perception+100;
+        this.internal_perception  = this.context.perception-20;
+
+        // Agent state
+        this.agent_state = 'free' // Can be free, locked or waiting.
+        this.agent_collision = []; // References for colliding agents
+        this.can_update = true;
+
+        this.target_set = false;
+
+        this.target = {
+            'host': [],
+            'guest': null
+        }
+
+
+        // Check the place in the stage
+    
+
+       // this.set_target(context);
+    }
+
+    update() {
+
+        // if(this.can_update){
+       
+
+            this.inject_data();
+
+            // Move to target     
+            if (this.target.guest != null) {
+                // console.log("helpoooodasf", this.context.label)
+                let steering = this.context.arrive(this.target.guest.pos);
+                this.context.applyForce(steering);
+            }
+
+            // If the particle is host for a target, update it
+            if (this.target.host.length > 0) {
+
+                // For all the host particles, call update
+                for (let host of this.target.host) {
+                    host.update();
+                }
+            }
+            this.context.show_edges();
+
+            // update the physics
+            this.context.update_physics();
+
+            // Show
+            //this.context.show_edges();
+            this.context.show_ellipse();
+
+            if (this.show_label) { this.context.show_label(); }
+
+            this.show_agent_debug();
+
+            // Cascade 
+            if (this.cascade == true) {
+                this.context.ripple_out(10);
+                this.context.cascade_state(this.label, 10);
+            }
+        // }
+
+    }
+
+
+
+    show_agent_debug(){
+
+
+        // color change
+        switch(this.context.userData.place_in_stage){
+            case 'focused':
+                this.color = [0,0,255];
+                break;
+            case 'neighbours':
+                this.color = [60,60,60];
+                break;
+            case 'secondary':
+                this.color = [255,255,255];
+                break;
+        }
+
+
+    }
+
+
+    arrive(target) {
+        // 2nd argument true enables the arrival behavior
+        let slow_radius = 600;
+        return this.seek(target, true, slow_radius);
+    }
+
+    seek(target, arrival = false, slow_radius) {
+        let force_to_target = p5.Vector.sub(target, this.context.pos);
+        let desiredSpeed = this.context.maxSpeed;
+        if (arrival) {
+          let slowRadius = slow_radius;
+          let distance;
+
+            // If there are colliding agents, distance is the middlepoint of those agents
+            if(this.agent_collision.length > 0){
+                distance = p5.Vector.sub(this.agent_collision[0].userData.pos, this.context.pos).mag();
+                //this.context.label = distance;
+               // this.set_color([255,0,0]);
+            }
+            else {
+                distance = force_to_target.mag();
+            }
+          
+          
+          
+          if (distance < slowRadius) {
+            //desiredSpeed = map(distance, 0, slowRadius, 0, this.context.maxSpeed);
+            this.context.maxSpeed = this.context.maxSpeed - this.context.maxSpeed/6;
+          }
+
+        }
+        force_to_target.setMag(desiredSpeed);
+        force_to_target.sub(this.context.vel);
+        force_to_target.limit(this.context.maxForce);
+        return force_to_target;
+      }
+
+
+
+
+    inject_data(){
+
+        switch(this.context.userData.place_in_stage){
+            case "focused":
+                this.context.set_radius(12);
+                this.show_label = true;
+                break;
+            case "neighbours":
+                this.context.set_radius(8);
+                this.show_label = true;
+                break;
+            case "secondary":
+                this.context.set_radius(4);
+                this.show_label = false;
+                break;
+        }
+    }
+
+
+
 }
 
 // VizTarget
@@ -2122,7 +2662,7 @@ return true;
 // Viz Target class to use in the global stage state
 // This kind of target lives independently of the particles, it is hosted on the stage state.
 class VizTargetGlobal {
-    constructor(context, posx, posy, user_data) {
+    constructor(context, posx, posy, perception, user_data) {
         
         this.context = context; // State stage object where the target is located
         this.stage = this.context.context; // This is not a 
@@ -2133,12 +2673,19 @@ class VizTargetGlobal {
         this.pos = createVector(posx, posy);
         this.vel = createVector(0,0);
         this.acc = createVector(0,0);
+        this.color = 'pink';
         this.radius = 10;
-        this.maxSpeed = 10;
-        this.maxForce = 0.4;
-        this.perception = 100;
-
+        this.maxSpeed = 40;
+        this.maxForce = 10;
+        this.perception = perception;
         this.userData = user_data;
+        // this.timeline_target_point = this.set_timeline_target_point();
+        this.colliding_targets = [];
+
+        //  If this is node target
+        this.initial_direction = this.set_initial_direction();
+        this.acceptable_distance_from_initial_direction = 100;
+        this.placement_state = 'moving'
         
     }
 
@@ -2150,30 +2697,269 @@ class VizTargetGlobal {
     }
 
     update() {
-        
         // Forces
+        if(this.is_node_target()){
+            
+            if(this.placement_state == 'moving'){
+                this.check_collision_with_targets();
+                this.apply_node_target_forces();
+                this.update_physics();
+            
+            }
+            
+            this.evaluate_placement_state();
+        }
+        
         // Update the physics
-        this.update_physics();
+        
         // Show
-        this.show_debug();
+        // this.show_debug();
 
     }
+
+    // this method only checks for the conditions to switch placement state
+    evaluate_placement_state() {
+
+        // console.log("evaluate placement state",this.placement_state)
+
+        switch (this.placement_state) {
+            case 'moving':
+                // evaluate if the target is stopped
+                let stopped = this.vel.mag() < 0.1 ? true : false;
+                if (stopped) {
+                    this.placement_state = 'stopped';
+                }
+                break;
+            case 'stopped':
+                // evaluate if the target is well placed
+                if(this.is_well_placed()){
+                    
+                    // console.log("context is" ,this.context)
+                    this.context.call_next_node_target();
+                    this.placement_state = 'placed'} 
+                else {
+                    // Try again
+                    try_again();
+                }
+                // If the distance from the ini
+                break;
+            case 'placed':
+                
+                break;
+
+        }
+        
+
+        const try_again = () => {
+            this.pos.x = random(innerWidth);
+            this.pos.y = random(innerHeight);
+            this.acceptable_distance_from_initial_direction = this.acceptable_distance_from_initial_direction + 10;
+            this.placement_state = 'moving';
+        }
+    }
+
+    // Set initial direction. To be called on constructor, for node targets, set a point near the years referenced in the timeline.
+    set_initial_direction(){
+
+        let db_node = this.userData.db_node
+
+        // Check if this is a node target
+        if(this.is_node_target()){
+
+            // It can be an exhibition or a constituent.
+            let type_of_dbnode = db_node.node_type;
+
+            if(type_of_dbnode == 'exhibition'){
+
+                // Get the year label from the database
+                // console.log(" date_year_record_id",db_node.date_year_record_id)
+                let year_db_node = get_single_node_anywhere(db_node.date_year_record_id[0]).get_label().toString();
+                // console.log(year_db_node)
+                let year_timeline_point = this.context.timeline.get_year_target_point(year_db_node);
+
+                // Return the position of the timeline point
+                // console.log(year_timeline_point)
+                return year_timeline_point.pos;
+                
+            } 
+            else if(type_of_dbnode == 'constituent'){
+
+                // Get a year array for the constituent membership nodes
+                let years_string_array = db_node.get_membership_as_years_array();
+                let years_timeline_points = [];
+                // For each year, get the timeline point
+                years_string_array.forEach(year => {
+                    years_timeline_points.push(this.context.timeline.get_year_target_point(year));
+                })
+                let years_middlepoint = calculate_middlepoint(years_timeline_points);
+                return years_middlepoint;
+                
+            } 
+            else {console.log("wrong type of db node"); return;}
+
+        }else {return;}
+
+    }
+
+    check_collision_with_targets(){
+    
+        // Query the target quadtree in the perception radius
+        let radius_circle = new Circle(this.pos.x, this.pos.y, this.perception);
+        let quadtree_query = this.context.targets_quadtree.query(radius_circle);
+        // Push the particles
+        let particle_query_results = [];
+        quadtree_query.forEach(item => particle_query_results.push(item.userData));
+        // Filter out this particle
+        particle_query_results = particle_query_results.filter(particle => particle != this);
+
+        this.colliding_targets = particle_query_results;
+        return particle_query_results;
+
+    }
+
+    is_well_placed(){
+
+        // Get the acceptable distance from the initial direction
+        let acceptable_distance = this.acceptable_distance_from_initial_direction;
+        if (this.pos.dist(this.pos, this.initial_direction) < acceptable_distance) {
+            // console.log("target is well placed")
+            return true; 
+        } else {
+            // console.log("target is not well placed")
+            return false;}
+        
+        
+    }
+
+    is_node_target() {
+        if(this.userData.is_node_target != undefined && this.userData.is_node_target){return true;} else {return false;}
+    }
+
+
+    // set_timeline_target_point(){
+
+    //    // Search in the targets array a random timeline target and reference it
+    //    let timeline_targets = this.targets.filter(target => target.is_part_of_timeline());
+    //     let random_index = parseInt(random(timeline_targets.length));
+    //     return timeline_targets[random_index];
+       
+    // }
+
+    applyForce(force) {
+        this.acc.add(force);
+    }
+
+    apply_node_target_forces(){
+
+        let forces = [];
+
+        // Force 1: arrive at distance to the edge timeline target point
+        if (this.placement_state == 'moving') {
+
+            // Move to initial direction
+            let initial_direction = this.arrive_at_distance(this.initial_direction, this.perception);
+            forces.push(initial_direction);
+
+            // Move away from other node targets
+            let distance_from_colliding_placed_targets = this.keep_distance_from_targets();
+            forces.push(distance_from_colliding_placed_targets);
+
+
+            forces.forEach(force => this.applyForce(force));
+        }
+
+        // Force 2: repel from other node targets
+        // for (let i = 0; i < this.colliding_node_targets.length; i++) {
+        //     forces.push(this.keep_distance_from_node_target(this.colliding_node_targets[i]));
+        // }
+
+
+        // Apply all forces
+        
+    }
+
+    keep_distance_from_targets() {
+        
+        // If are no colliding targets, return 0,0 vector
+        if(this.colliding_targets.length == 0){return createVector(0,0);}
+
+        // From the colliding targets, calculate the middlepoint
+        let colliding_middlepoint = calculate_middlepoint(this.colliding_targets);
+
+        let force = p5.Vector.sub(this.pos, colliding_middlepoint);
+        force.sub(this.vel);
+        force.limit(this.maxForce);
+        this.maxSpeed = 0;
+        return force;
+    }
+
+
+    // Check if the target is part of a timeline. Ment to be excecuted from another object.
+    is_part_of_timeline() {
+        if(this.userData.timeline != undefined){
+            return true;} else 
+            {return false;}
+    }
+
+    arrive_at_distance(target,distance_from_target) {
+        // Inverse of seek
+        let force = p5.Vector.sub(this.pos, target);
+        let desiredSpeed = this.maxSpeed;
+        
+          let slowRadius = distance_from_target;
+          let distance = force.mag();
+          if (distance > slowRadius) {
+            desiredSpeed = map(distance, 0, slowRadius, this.maxSpeed, 0);
+            
+          }
+        
+        force.setMag(desiredSpeed);
+        force.sub(this.vel);
+        force.limit(this.maxForce);
+        return force;
+      }
 
     show_debug() {
 
         if(debug){
             push();
                 // center
-                fill('pink');
+                fill(this.color);
                 noStroke();
                 ellipse(this.pos.x, this.pos.y, 3, 3);
             pop();
             push();
                 // Perception
-                stroke('pink');
+                stroke(this.color);
                 noFill();
                 ellipse(this.pos.x, this.pos.y, this.perception, this.perception);
             pop();
+
+            // If this is a timeline target, and is the first month, show the label
+            if(this.userData.timeline != undefined && this.userData.timeline.month == 1){
+                push()
+                    fill(0)
+                    text(this.userData.timeline.year, this.pos.x, this.pos.y +20);
+                pop()
+            }
+
+            if(this.is_node_target()){
+
+                push()
+                    fill(0)
+                    
+                    // let stopped = this.vel.mag() < 0.1 ? true : false
+
+
+                    text(this.userData.db_node.node_type, this.pos.x, this.pos.y +40);
+                    text(this.placement_state, this.pos.x, this.pos.y +60);
+                    text(this.colliding_targets.length+" colliding targets", this.pos.x, this.pos.y +80);
+                    // initial direction
+                    fill('green')
+                    ellipse(this.initial_direction.x, this.initial_direction.y, 5, 5);
+                pop()
+            }
+
         }
     }
 }
@@ -2181,18 +2967,23 @@ class VizTargetGlobal {
 class TimelineGlobal{
 
     // TODO this composition must change regarding the modificatons in screen size. This is a object to render in global view, where maybe we're going to implement grab screen or something that allows to zoom in and out.
-    constructor(context){
+    constructor(context, perception) {
         this.context = context; // State stage global
         this.margin_horizontal = 80;
         this.margin_vertical = 80;
         this.curve_tightness = 1;
+        this.perception = perception;
+        
         this.start_point = createVector(lerp(0,width,0.15),lerp(0,height,0.15));
         
         this.targets = [];
         this.end_point = createVector(width - this.margin_horizontal, height - this.margin_vertical);
         
+        this.years_reference = [];
+        for (let year = 1995; year <= 2024; year++) {
+            this.years_reference = [...this.years_reference, year.toString()];
+        }
 
-        this.years_reference = ["1995", "1996", "1997", "1998", "1999", "2000", "2001", "2002", "2003", "2004", "2005", "2006", "2007", "2008", "2009", "2010", "2011", "2012", "2013", "2014","2015", "2016", "2017", "2018", "2019", "2020", "2021", "2022", "2023", "2024"];
         
         this.points_amount = this.years_reference.length*12;
         this.build_timeline();
@@ -2204,6 +2995,11 @@ class TimelineGlobal{
         // Targets are being updated in the state stage.
     }
 
+    // It takes a year string and returns the target point
+    get_year_target_point(year){
+        return this.targets.find(target => target.userData.timeline.year == year);
+    }
+
     // builds the timeline points in a curve
     build_timeline(){
 
@@ -2212,16 +3008,18 @@ class TimelineGlobal{
             
             // Check if the screen is vertical or horizontal
             // TODO: This should be managed more centrally at some point.
-            let screen_orientation = innerWidth > innerHeight;
-            console.log("screen is" +screen_orientation);
+            // let screen_orientation = innerWidth > innerHeight;
+            
             let x, y;
 
-            if (screen_orientation == true) {
+            if (viz.get_screen_orientation() == 'horizontal') {
                 // Make a horizontal curve
+                this.screen_orientation = 'horizontal';
                 y = lerp(0, height, map(sin(index / (this.points_amount / 6.5)), 0, 1, 0.5, 0.9));
                 x = lerp(0, width, map(index, -30, this.points_amount + 30, 0, 1))
             } else {
                 // Make a vertical curve
+                this.screen_orientation = 'vertical';
                 x = lerp(0, width, map(sin(index / (this.points_amount / 7.5)), 0, 1, 0.5, 0.9));
                 y = lerp(0, height, map(index, -30, this.points_amount + 30, 0, 1))
             }
@@ -2245,11 +3043,25 @@ class TimelineGlobal{
                 let userData = {
                     'timeline': {
                         'year': year_counter,
-                        'month': month_counter
+                        'month': month_counter,
+                    'db_node': null,
+                    'particle': null
                     }
                 }
+
+                // If the month counter is 1, asociate the membership node of the year
+                if(month_counter == 1){
+
+                    // Find in hte local db a memebership node that has the same year as the year counter.
+                    localdb.membership_nodes.find(node => {
+                        if(node.semantic_id == year_counter+'_Members'){
+                            userData.db_node = node;
+                        }
+                    })
+
+                }
                 
-                let new_target = new VizTargetGlobal(this, x, y, userData);
+                let new_target = new VizTargetGlobal(this, x, y, this.perception, userData);
                 this.targets.push(new_target);
                 month_counter++;
             
@@ -2263,7 +3075,16 @@ class TimelineGlobal{
         }
 
         // 2. Call particles to render the targets.
-        // TODO: Call particles to render the targets!
+        
+
+        // Define the target on january
+        let years_timeline_targets = this.targets.filter(target => target.userData.timeline.month == 1)
+
+        years_timeline_targets.forEach(target => this.context.transform_particle(target.userData.db_node.record_id,target) );
+
+        // Call a particle on each month
+        let month_timeline_targets = this.targets.filter(target => target.userData.timeline.month != 1)
+        month_timeline_targets.forEach(target => this.context.transform_particle(null,target) );
 
 
     }
@@ -2278,4 +3099,34 @@ class TimelineGlobal{
         }
 
     }
+}
+
+// GENERAL FUNCTIONS
+
+
+// This function calculates the middle point of an array of points.
+function calculate_middlepoint(points_array) {
+
+    // Check if the array is not empty
+    if (points_array.length > 0) {
+
+        // Initialize x and y coordinates to 0
+        let x = 0;
+        let y = 0;
+
+        // Iterate over each point in the array
+        for (let i = 0; i < points_array.length; i++) {
+
+            // Add the x and y values of each point to the running totals
+            x += points_array[i].pos.x;
+            y += points_array[i].pos.y;
+        }
+
+        // Calculate the average x and y values by dividing the running totals by the length of the array
+        let middle_point = createVector(x / points_array.length, y / points_array.length);
+
+        // Return the middle point as a p5.js vector
+        return middle_point;
+    }
+
 }

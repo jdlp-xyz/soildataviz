@@ -1,0 +1,23 @@
+{
+    "background":"#ffffff",
+    "free_particles_01":"#e65506",
+    "free_particles_02":"#fd8d3c",
+    "global_particles_low_engagement":"#3182bd",
+    "global_particles_high_engagement":"#6baed6",
+    "global_particles_selected":"#9ecae1",
+    "global_timeline_year_idle":"#636363",
+    "local_particles_focused":"#6baed6",
+    "local_particles_neighbours":"#3182bd",
+    "local_particles_secondary":"#fd8d3c",
+    "edges_idle":"#bdbdbd",
+    "edges_selected":"#636363",
+    "edges_dimmed":"#3182bd",
+    "label_1row_idle":"#636363",
+    "label_1row_selected":"#636363",
+    "label_1row_dimmed":"#636363",
+    "label_2row_idle":"#636363",
+    "label_2row_selected":"#636363",
+    "label_2row_dimmed":"#636363",
+    "label_1row_print":"#636363",
+    "label_2row_print":"#636363"
+}
