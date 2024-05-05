@@ -49,9 +49,10 @@ class LocalDB {
                     new ConstituentsNode(
 
                         // Required fields
-                        localdata_constituents[i].full_name,
+                        localdata_constituents[i].semantic_id,
                         localdata_constituents[i].record_id,
-                        localdata_constituents[i].full_name,
+                        localdata_constituents[i].first_name,
+                        localdata_constituents[i].last_name,
 
                     ));
 
@@ -59,13 +60,13 @@ class LocalDB {
                     if(localdata_constituents[i].soil_link != undefined) {
                         this.constituents_nodes[i].soil_link = localdata_constituents[i].soil_link;
                     }
-                    if(localdata_constituents[i].membership_record_ids != undefined) {
-                        this.constituents_nodes[i].membership_record_ids = localdata_constituents[i].membership_record_ids;
+                    if(localdata_constituents[i].membership_record_id != undefined) {
+                        this.constituents_nodes[i].membership_record_ids = localdata_constituents[i].membership_record_id;
                     }
                     if(localdata_constituents[i].exhibitions_artist_record_ids != undefined) {
                         this.constituents_nodes[i].exhibitions_artist_record_ids = localdata_constituents[i].exhibitions_artist_record_ids;
                     }
-                    if(localdata_constituents[i].exhibitions_curator_record_ids != undefined) {
+                    if(localdata_constituents[i].exhibitions_curator_record_id != undefined) {
                         this.constituents_nodes[i].exhibitions_curator_record_ids = localdata_constituents[i].exhibitions_curator_record_ids;
                     }
 
@@ -76,9 +77,9 @@ class LocalDB {
             for(let i = 0; i < Object.keys(localdata_memberships).length; i++) {
 
                 this.membership_nodes.push(new MembershipNode(
-                    localdata_memberships[i].year,
+                    localdata_memberships[i].semantic_id,
                     localdata_memberships[i].record_id,
-                    // localdata_memberships[i].year_record_id[0],
+                    localdata_memberships[i].year_record_id[0],
                     localdata_memberships[i].constituents_record_ids
                 ))
 
@@ -89,44 +90,44 @@ class LocalDB {
 
             //parseInt(localdb.membership_nodes[0].semantic_id.slice(0,4))
 
-            // for(let i = 0; i < Object.keys(localdata_memberships).length; i++) {
+            for(let i = 0; i < Object.keys(localdata_memberships).length; i++) {
 
-            //     this.years_nodes.push(new YearsNode(
+                this.years_nodes.push(new YearsNode(
 
-            //         // Year number based on the membership year
-            //         localdata_memberships[i].semantic_id.slice(0,4),
-            //         localdata_memberships[i].year_record_id[0],
-            //         parseInt(localdata_memberships[i].semantic_id.slice(0,4)),
+                    // Year number based on the membership year
+                    localdata_memberships[i].semantic_id.slice(0,4),
+                    localdata_memberships[i].year_record_id[0],
+                    parseInt(localdata_memberships[i].semantic_id.slice(0,4)),
 
-            //     ))
-            // }
+                ))
+            }
             
 
 
             // Exhibitions
 
-            // for (let i = 0; i < Object.keys(localdata_exhibitions).length; i++) {
+            for (let i = 0; i < Object.keys(localdata_exhibitions).length; i++) {
 
-            //     this.exhibition_nodes.push(
+                this.exhibition_nodes.push(
 
-            //         new ExhibitionNode(
+                    new ExhibitionNode(
                         
-            //             localdata_exhibitions[i].semantic_id,
-            //             localdata_exhibitions[i].record_id,
-            //             localdata_exhibitions[i].exhibition_title,
-            //             localdata_exhibitions[i].year_record_id,
-            //             localdata_exhibitions[i].artist_record_ids,
-            //             // TODO Integrate curators in a next iteration.
-            //             //localdata_exhibitions[i].curator_record_ids
+                        localdata_exhibitions[i].semantic_id,
+                        localdata_exhibitions[i].record_id,
+                        localdata_exhibitions[i].exhibition_title,
+                        localdata_exhibitions[i].year_record_id,
+                        localdata_exhibitions[i].artist_record_ids,
+                        // TODO Integrate curators in a next iteration.
+                        //localdata_exhibitions[i].curator_record_ids
 
 
-            //         )
+                    )
 
-            //         // Optional
-            //         //url
+                    // Optional
+                    //url
 
-            //     )
-            // }
+                )
+            }
             console.log("Building objects from json data...");
             resolve();
         })
@@ -204,7 +205,7 @@ class LocalDB {
 
         
         // Pick randomly the kind of node.
-        let node_arrays = [this.constituents_nodes, this.membership_nodes] //this.exhibition_nodes, this.membership_nodes, this.years_nodes];
+        let node_arrays = [this.constituents_nodes, this.exhibition_nodes, this.membership_nodes, this.years_nodes];
         let random_array = node_arrays[parseInt(random(node_arrays.length))];
         let random_node = random_array[parseInt(random(random_array.length))];
         let random_record_id = random_node.record_id;
@@ -599,15 +600,14 @@ class DBNode {
 
 class ConstituentsNode extends DBNode {
 
-    constructor(semantic_id, record_id, full_name) {
+    constructor(semantic_id, record_id, first_name, last_name, soil_link,  membership_record_ids, exhibitions_artist_record_ids, exhibitions_curator_record_ids, publications_record_ids) {
 
         // Calls the abstract node class constructor fields.
         super(semantic_id, record_id);
         this.node_type = "constituent"
-        this.full_name = full_name
-        // this.first_name = first_name;
-        // this.last_name = last_name;
-        // this.soil_link = soil_link;
+        this.first_name = first_name;
+        this.last_name = last_name;
+        this.soil_link = soil_link;
 
         // Record ids fetched from the airtable database.
 
@@ -644,8 +644,8 @@ class ConstituentsNode extends DBNode {
 
     get_full_name(){
 
-        // let full_name = this.first_name + " " + this.last_name;
-        let full_name = this.full_name;
+        let full_name = this.first_name + " " + this.last_name;
+
         return full_name;
 
     }
@@ -663,9 +663,7 @@ class ConstituentsNode extends DBNode {
 
             for (let i = 0; i < this.membership_nodes.length; i++){
                 //console.log("membership node: ", this.membership_nodes[i])
-                // let year = get_single_node_anywhere(this.membership_nodes[i].year_record_id).semantic_id;
-                console.log(this.membership_nodes[i].year)
-                let year = this.membership_nodes[i].get_year();
+                let year = get_single_node_anywhere(this.membership_nodes[i].year_record_id).semantic_id;
                 // year = year.toString();
                 years_array.push(year);
 
@@ -693,15 +691,15 @@ class ConstituentsNode extends DBNode {
 
         }
 
-        // if(this.exhibitions_artist_nodes.length > 0){
+        if(this.exhibitions_artist_nodes.length > 0){
          
-        //     for (let i = 0; i < this.exhibitions_artist_nodes.length; i++){
+            for (let i = 0; i < this.exhibitions_artist_nodes.length; i++){
 
-        //         neighbours.push(this.exhibitions_artist_nodes[i]);
+                neighbours.push(this.exhibitions_artist_nodes[i]);
 
-        //     }
+            }
 
-        // }
+        }
 
         // if(this.exhibition_curator_nodes.length > 0){
 
@@ -943,33 +941,22 @@ class YearsNode extends DBNode {
 
 class MembershipNode extends DBNode {
 
-    constructor(semantic_id, record_id, constituents_record_ids) {
+    constructor(semantic_id, record_id, year_record_id, constituents_record_ids) {
 
         // Calls the abstract node class constructor fields. 
         super(semantic_id, record_id);
+
         this.node_type = "membership"
-        // this.year_record_id = year_record_id; // record id
-        this.year;
-        this.set_year(); // year reference as number
+        this.year_record_id = year_record_id; // record id
+        this.year; // object reference
+
         this.constituents_record_ids = constituents_record_ids;
         this.constituents_nodes = [] // objects reference
 
     }
 
-    set_year(){
-        
-        let year = this.semantic_id.slice(0, 4);
-        
-        this.year = year;
-        console.log("membership year: ", this.year);
-    }
-
-    get_year(){
-        return this.semantic_id.slice(0, 4);
-    }
-
     get_label(){
-        let label = this.get_year()+" Membership";
+        let label = this.year.semantic_id.toString()+" Membership";
         return label;
     }
 
@@ -991,15 +978,15 @@ class MembershipNode extends DBNode {
 
         let neighbours = [];
 
-        // if (this.year.length > 0) {
+        if (this.year.length > 0) {
 
-        //     for (let i = 0; i < this.year.length; i++) {
+            for (let i = 0; i < this.year.length; i++) {
 
-        //         neighbours.push(this.year[i]);
+                neighbours.push(this.year[i]);
 
-        //     }
+            }
 
-        // }
+        }
 
         if (this.constituents_nodes.length > 0) {
 

@@ -227,7 +227,7 @@ class Stage {
                 this.state = new StateStageFree(this)
                 break;
             case 'local':
-                this.state = new StateStageLocal(this, "reckeeM7EPI7SOsGF") // for testing only
+                this.state = new StateStageLocal(this, 'rec1CDshlHNbEqN01') // for testing only
                 console.log("changed state to:", this.state);
                 break;
             case 'global':
@@ -349,7 +349,7 @@ class StateStageLocal extends StageState {
         this.local_particles = []
 
         // Testing purposes
-        this.transform_local_network("reckeeM7EPI7SOsGF");
+        this.transform_local_network(focused_record_id);
         // dat_gui.add(gui_functions, 'Change particle focus');
 
         
@@ -704,6 +704,7 @@ class StateStageLocal extends StageState {
 
         // Get the node
         let selected_node = get_single_node_anywhere(record_id);
+       
 
         // Set the return object
         let staged_nodes = {'focused': [], 'neighbours': [], 'secondary': []};
@@ -715,6 +716,7 @@ class StateStageLocal extends StageState {
         // Put the node in focus
         staged_nodes.focused.push(selected_node);
 
+        console.log("selected node:", selected_node)
         // Focused node's neigbours
         staged_nodes.neighbours = selected_node.get_neighbours();
 
@@ -2439,7 +2441,7 @@ class VizParticleStateGlobal extends VizParticleState {
                 pop();
                 break;
             case "timeline_year":
-                let textstring = this.context.userData.db_node.get_label().substring(0, 4);
+                let textstring = this.context.userData.db_node.get_year();
                 push()
                 textFont(fontRobotoMedium);
                 textSize(style.timeline_year_font_size);
@@ -3175,7 +3177,7 @@ class TimelineGlobal{
 
                     // Find in hte local db a memebership node that has the same year as the year counter.
                     localdb.membership_nodes.find(node => {
-                        if(node.semantic_id == year_counter+'_Members'){
+                        if(node.semantic_id == year_counter+' Member'){
                             userData.db_node = node;
                         }
                     })
@@ -3201,7 +3203,7 @@ class TimelineGlobal{
 
         // Define the target on january
         let years_timeline_targets = this.targets.filter(target => target.userData.timeline.month == 1)
-
+        console.log("years_timeline_targets",years_timeline_targets)
         years_timeline_targets.forEach(target => this.context.transform_particle(target.userData.db_node.record_id,target,'timeline_year') );
 
         // Call a particle on each month

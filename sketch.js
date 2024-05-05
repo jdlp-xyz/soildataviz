@@ -4,44 +4,30 @@
 let debug = true;
 
 // Create visualization
-let viz;
-
-// debug
-let center_point;
-
-// color controls
-//let color_controls;
-
-//canvas background color
-let bkg_color;
-
 // Create a local object db
-let localdb;
+let viz, localdb;
+
 // create variables to store the local data that will be loaded.
-let localdata_constituents, localdata_exhibitions, localdata_memberships, colors,style;
+let localdata_constituents, localdata_memberships, colors, style;
 
 // Preloading the fonts for the visualizarion from a local directory.
-// TODO include the local json or csv with the local database.
 function preload() {
   
     // Load fonts
     fontRoboto = loadFont('./fonts/Roboto-Medium.ttf');
     fontRobotoMedium = loadFont('./fonts/Roboto-Medium.ttf');
 
-    // Load json files with the base data.
-    // TODO A next iteration will include a call to the cloud server for updates.
-    localdata_constituents = loadJSON('./data/constituents.json');
-    localdata_exhibitions = loadJSON('./data/exhibitions.json');
-    localdata_memberships = loadJSON('./data/membership.json');
+    // Data
+    localdata_constituents = loadJSON('./data/test/constituents_5_5_2024.json');
+    // localdata_exhibitions = loadJSON('./data/exhibitions.json');
+    localdata_memberships = loadJSON('./data/test/membership_5_5_2024.json');
+    
+    // Style
     colors = loadJSON('./colors.json');
     style = loadJSON('./style.json');
 
   }
 
-
-  // let colors = {'main': [0, 255, 0], 
-                // 'secondart': [0, 0, 255]};
-  
 function export_colors_to_json() {
       // creates a file called 'newFile.txt'
     let writer = createWriter('colors.json');
