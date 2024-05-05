@@ -592,6 +592,7 @@ class StateStageLocal extends StageState {
 
             // set the label
             new_particle.label = db_node.get_label();
+            // new_particle.text_label.first_row = db_node.get_label();
 
             // set the particle's place in stage
             new_particle.userData.place_in_stage = place_in_stage;
@@ -1256,10 +1257,29 @@ class StateStageGlobal extends StageState {
         
         // simply passes the update function to each viz particle
         // this will change as there will be diferent layers of particles that need to be rendered in a particular order.
-        for(let i = 0; i < this.context.viz_particles.length; i++){
-            this.context.viz_particles[i].update();
-        }
+        
+        // for(let i = 0; i < this.context.viz_particles.length; i++){
+        //     this.context.viz_particles[i].update();
+        // }
 
+        let free_particles = this.context.viz_particles.filter(particle => particle.state.get_label() == "free");
+        let timeline_month_particles = this.context.viz_particles.filter(particle => particle.state.place_in_stage != undefined && particle.state.place_in_stage == "timeline_month");
+        let timeline_year_particles = this.context.viz_particles.filter(particle => particle.state.place_in_stage != undefined && particle.state.place_in_stage == "timeline_year");
+        let constituent_particles = this.context.viz_particles.filter(particle => particle.state.place_in_stage != undefined && particle.state.place_in_stage == "constituent");
+
+        free_particles.forEach(particle => {
+            particle.update();
+        })
+        timeline_month_particles.forEach(particle => {
+            particle.update();
+        })
+
+        constituent_particles.forEach(particle => {
+            particle.update();
+        })
+        timeline_year_particles.forEach(particle => {
+            particle.update();
+        })
         
         // For testing
         this.update_timeline();
@@ -1268,7 +1288,7 @@ class StateStageGlobal extends StageState {
     }
 
     // Transform a random free particle to a global one
-    transform_particle = (record_id, target) => {
+    transform_particle = (record_id, target, place_in_stage) => {
 
         // Get a random free particle
         let free_particles = this.context.viz_particles.filter(particle => particle.state.get_label() == "free");
@@ -1279,6 +1299,7 @@ class StateStageGlobal extends StageState {
         // change the particle's state to local
         new_particle.state.unlock_state();
         new_particle.set_state("global");
+        new_particle.state.set_place_in_stage(place_in_stage);
 
         //asign the particle's db node
         if(record_id != null){
@@ -1286,6 +1307,7 @@ class StateStageGlobal extends StageState {
         new_particle.userData.db_node = db_node;
         // set the label
         new_particle.label = db_node.get_label();
+        // new_particle.text_label.first_row = db_node.get_label();
 
         }
 
@@ -1326,7 +1348,7 @@ class StateStageGlobal extends StageState {
 
             
             // Transform the particle to global
-            let transformed_particle = this.transform_particle(target_db_node_record_id, target);
+            let transformed_particle = this.transform_particle(target_db_node_record_id, target, "constituent");
 
             // Reference the particle in the target
             target.particle = transformed_particle;
@@ -1476,6 +1498,11 @@ class StateStageGlobal extends StageState {
         constituents_members.sort(function(a, b) {
             return b.membership_nodes.length - a.membership_nodes.length
         })
+
+        // Define max engagement by membership
+        this.max_engagement_by_membership = constituents_members[0].membership_nodes.length
+        console.log("max engagement by membership", this.max_engagement_by_membership)
+
         // Push the constituents members to the global db nodes
         constituents_members.forEach(constituent => {
             this.global_db_nodes.push(constituent);
@@ -1668,7 +1695,8 @@ class VizParticle {
         push();
             noStroke();
             //noFill();
-            fill(this.state.color[0], this.state.color[1], this.state.color[2]);
+            // console.log(this.state.color)
+            fill(this.state.color);
           //  fill(this.color[0], this.color[1], this.color[2]);
             ellipse(this.pos.x, this.pos.y, this.radius*2, this.radius*2)
         pop();
@@ -1691,7 +1719,8 @@ class VizParticle {
 
                 // for each neighbor, draw a line to it
                 present_neighbours.forEach(neighbor => {
-                    stroke(0, 20);
+                    stroke(hexToColor(colors.edges_idle));
+                    strokeWeight(0.2)
                     line(this.pos.x, this.pos.y, neighbor.pos.x, neighbor.pos.y);
                 })
 
@@ -1702,6 +1731,7 @@ class VizParticle {
 
     set_label(label_string){
         this.label = label_string;
+        this.text_label.first_row = label_string;
     }
 
     set_radius(radius){
@@ -1711,17 +1741,34 @@ class VizParticle {
 
     show_label(){
 
+        // this.text_label_object.update();
          if(this.label != null && this.label != "undefined"){
             push();
                 textAlign(CENTER, TOP);
-                textFont(fontRoboto);
+                textFont(fontRobotoMedium);
+                fill(hexToColor(colors.label_1row_idle));
+                textSize(16);
                 text(this.label, this.pos.x, this.pos.y+this.radius*1.5);
+                
             pop();
 
            
         }
 
     }
+
+    show_label_2row() {
+
+        push()
+            textFont(fontRoboto);
+            fill(hexToColor(colors.label_2row_idle));
+            textSize(8);
+            text("2 years membership", this.pos.x, this.pos.y + this.radius * 1.5 + 16);
+
+        pop()
+    }
+
+    
 
     // Random walk for testing.
     random_walk(){
@@ -2058,7 +2105,7 @@ class VizParticleStateLocal extends VizParticleState {
 
             if (this.show_label) { this.context.show_label(); }
 
-            this.show_agent_debug();
+             this.show_agent_debug();
 
             // Cascade 
             if (this.cascade == true) {
@@ -2112,63 +2159,22 @@ class VizParticleStateLocal extends VizParticleState {
 
 
     show_agent_debug(){
-        //show target
-        // push();
-        //     //rect(this.context.userData.initial_target.x, this.context.userData.initial_target.y, 10, 10);
-        // pop();
 
-        // // show agent_perception
-        // push()
-        //     noFill();
-        //     stroke(255);
-        //     ellipse(this.context.pos.x, this.context.pos.y, this.external_perception, this.context.external_perception);
-        //     stroke(255,0,0);
-        //     ellipse(this.context.pos.x, this.context.pos.y, this.internal_perception, this.internal_perception);
-        // pop()
 
         // color change
         switch(this.context.userData.place_in_stage){
             case 'focused':
-                this.color = [0,0,255];
+                this.color = colors.local_particles_focused;
                 break;
             case 'neighbours':
-                this.color = [60,60,60];
+                this.color = colors.local_particles_neighbours;
                 break;
             case 'secondary':
-                this.color = [255,255,255];
+                this.color = colors.local_particles_secondary;
                 break;
         }
-
-        // push()
-        //     text(this.agent_collision.length, this.context.pos.x, this.context.pos.y+30);
-        // pop()
     }
 
-    // check_collisions_with_agents(external_perception = true){
-    //     let perception_ring;
-    //     if(external_perception == true){
-    //         perception_ring = this.external_perception;
-    //     }else {
-    //         perception_ring = this.internal_perception;}
-    //     // Query the quadtree points in that boundary to get all collsion results
-    //     let collision = this.context.get_collision(perception_ring, 'circle');
-    //     //console.log(collision)
-    //     // Filter the particles that are in local state
-    //     collision = collision.filter(particle => particle.userData.state.get_label() == 'local');
-
-    //     // Sort the collision results from the nearest to the farthest
-    //     collision.sort((a,b) => {
-    //         return p5.Vector.dist(this.context.pos, a.userData.pos) - p5.Vector.dist(this.context.pos, b.userData.pos);
-    //     })
-
-    //     // Filter the particles whose agent state is locked
-    //     //collision = collision.filter(particle => particle.userData.state.agent_state == 'locked');
-
-    //     // Return the results
-    //     //console.log("collisions", collision.length)
-    //     return collision;
-
-    // }
 
     arrive(target) {
         // 2nd argument true enables the arrival behavior
@@ -2323,7 +2329,7 @@ class VizParticleStateLocal extends VizParticleState {
 class VizParticleStateFree extends VizParticleState {
     constructor(context){
         super(context);
-        this.color = [170,170,170];
+        this.color = colors.free_particles_01;
         this.set_label("free");
         this.variation = 10;
         this.context.clean_user_data();
@@ -2335,7 +2341,10 @@ class VizParticleStateFree extends VizParticleState {
 
     update(){
        // console.log("calling update from free state");
-        this.inject_data();
+
+        // update color
+        this.color = colors.free_particles_01;
+
         this.context.random_walk();
         this.context.show_ellipse();
         // if(this.cascade == true){
@@ -2350,7 +2359,7 @@ class VizParticleStateGlobal extends VizParticleState {
 
     constructor(context){
         super(context);
-        this.color = [0,0,255];
+        
         this.set_label("global");
         this.variation = 0;
 
@@ -2368,7 +2377,9 @@ class VizParticleStateGlobal extends VizParticleState {
             'host': [],
             'guest': null
         }
-
+        this.place_in_stage = null;
+        this.color = color(0, 0, 0);
+        
 
         // Check the place in the stage
     
@@ -2378,10 +2389,7 @@ class VizParticleStateGlobal extends VizParticleState {
 
     update() {
 
-        // if(this.can_update){
-       
-
-            this.inject_data();
+            // console.log("starting update in particle", this.context.label, "with place in stage", this.place_in_stage)
 
             // Move to target     
             if (this.target.guest != null) {
@@ -2392,24 +2400,18 @@ class VizParticleStateGlobal extends VizParticleState {
 
             // If the particle is host for a target, update it
             if (this.target.host.length > 0) {
-
                 // For all the host particles, call update
                 for (let host of this.target.host) {
                     host.update();
                 }
             }
-            this.context.show_edges();
-
-            // update the physics
             this.context.update_physics();
 
-            // Show
-            //this.context.show_edges();
-            this.context.show_ellipse();
-
-            if (this.show_label) { this.context.show_label(); }
-
-            this.show_agent_debug();
+            this.calculate_color();
+            this.context.show_edges();
+            this.show_ellipse();
+            this.show_label();
+            // this.show_agent_debug();
 
             // Cascade 
             if (this.cascade == true) {
@@ -2418,9 +2420,127 @@ class VizParticleStateGlobal extends VizParticleState {
             }
         // }
 
+        // console.log("particle", this.context.label, "updated")
+    }
+
+    show_label(){
+
+        // console.log("showing label", this.place_in_stage)
+        // Switch on place in stage
+        switch(this.place_in_stage){
+            case "constituent":
+                push();
+                textFont(fontRobotoMedium);
+                textSize(10);
+                translate(this.context.pos.x, this.context.pos.y);
+                rotate(35 * Math.PI / 180);
+                fill(hexToColor(colors.label_1row_idle));
+                text(this.context.userData.db_node.get_label(),this.context.radius+3, 2);
+                pop();
+                break;
+            case "timeline_year":
+                let textstring = this.context.userData.db_node.get_label().substring(0, 4);
+                push()
+                textFont(fontRobotoMedium);
+                textSize(style.timeline_year_font_size);
+                fill(hexToColor(colors.global_timeline_year_low));
+                text(textstring, this.context.pos.x+this.context.radius, this.context.pos.y + 20);
+                pop()
+                break;
+        }
+
+    }
+
+    show_ellipse(){
+        
+        switch(this.place_in_stage){
+            case "constituent":
+                // Radius based on engagement between limits set by style.
+                this.context.radius = map(this.get_engagement_by_membership(), 0, 1, style.g_constituent_radius_min, style.g_constituent_radius_max);
+                push()
+                noStroke()
+                fill(this.color)
+                ellipse(this.context.pos.x, this.context.pos.y, this.context.radius*2, this.context.radius*2)    
+                pop()
+                break;
+            case "timeline_year":
+                // this.context.radius = style.g_timeline_year_radius;
+                this.context.radius = map(this.get_engagement_by_membership(), 0, 1, style.g_timeline_year_min, style.g_timeline_year_max);
+                // this.context.show_ellipse()
+                push()
+                noStroke()
+                fill(this.color)
+                ellipse(this.context.pos.x, this.context.pos.y, this.context.radius*2, this.context.radius*2)    
+                pop()
+                break;
+            case "timeline_month":
+                this.context.radius = style.g_timeline_month_radius;
+                // this.context.show_ellipse()
+                push()
+                noStroke()
+                fill(this.color)
+                ellipse(this.context.pos.x, this.context.pos.y, this.context.radius*2, this.context.radius*2)    
+                pop()
+                break;
+        }
     }
 
 
+    set_place_in_stage(place_in_stage){
+        this.place_in_stage = place_in_stage
+        // console.log("my place in stage is "+this.place_in_stage)
+    }
+
+
+    get_engagement_by_membership(){
+        let particle_engagement_by_membership = this.context.context.state.get_present_neighbours(this.context).length;
+            
+        // console.log(this.context.max_engagement_by_membership)
+        let engagement_level = map(particle_engagement_by_membership, 1, this.context.context.state.max_engagement_by_membership, 0, 1)
+        
+        return engagement_level
+    }
+
+    // this imports and process the color of the particle depending on its place in stage
+    calculate_color() {
+
+
+        // subfunction
+        const visualize_engagement_color = (color_low, color_high) => {
+
+            // Get the present neighbours of this particle
+            let engagement_level = this.get_engagement_by_membership();
+            
+            
+            let color_lerp = lerpColor(color_low, color_high, engagement_level);
+            // console.log("color lerp",color_lerp)
+            return color_lerp;
+
+        }
+
+        // excecution
+
+        switch (this.place_in_stage) {
+            case 'timeline_year':
+                // this.color = colors.global_timeline_year_low;
+                this.color = visualize_engagement_color(hexToColor(colors.global_timeline_year_low), hexToColor(colors.global_timeline_year_high));
+                break;
+            case 'timeline_month':
+                this.color = colors.global_timeline_month_idle;
+                break;
+            case 'constituent':
+                // console.log(hexToColor(colors.constituent_low))
+                // this.color = 'red'
+                // this.color = hexToColor(colors.constituent_low);
+                this.color = visualize_engagement_color(hexToColor(colors.constituent_low), hexToColor(colors.constituent_high));
+                // console.log("calculated color: ",this.color.r, this.color.g, this.color.b)
+                break;
+
+        }
+
+
+
+    }
 
     show_agent_debug(){
 
@@ -2557,9 +2677,10 @@ class VizTargetLocal{
          
 
         let separation_magnitude = 100;
+
         if(this.guest_particle.userData.place_in_stage === "neighbours"){
 
-            separation_magnitude = 200;
+            separation_magnitude = 300;
         }
         if(this.guest_particle.userData.place_in_stage === "secondary"){
             separation_magnitude = 50;
@@ -2985,7 +3106,7 @@ class TimelineGlobal{
         }
 
         
-        this.points_amount = this.years_reference.length*12;
+        this.points_amount = (this.years_reference.length*12)-11;
         this.build_timeline();
         this.reference_targets_on_stage();
 
@@ -3071,6 +3192,7 @@ class TimelineGlobal{
                 year_counter++;
             }
 
+       
 
         }
 
@@ -3080,11 +3202,11 @@ class TimelineGlobal{
         // Define the target on january
         let years_timeline_targets = this.targets.filter(target => target.userData.timeline.month == 1)
 
-        years_timeline_targets.forEach(target => this.context.transform_particle(target.userData.db_node.record_id,target) );
+        years_timeline_targets.forEach(target => this.context.transform_particle(target.userData.db_node.record_id,target,'timeline_year') );
 
         // Call a particle on each month
         let month_timeline_targets = this.targets.filter(target => target.userData.timeline.month != 1)
-        month_timeline_targets.forEach(target => this.context.transform_particle(null,target) );
+        month_timeline_targets.forEach(target => this.context.transform_particle(null,target, 'timeline_month') );
 
 
     }
@@ -3127,6 +3249,119 @@ function calculate_middlepoint(points_array) {
 
         // Return the middle point as a p5.js vector
         return middle_point;
+    }
+
+}
+
+
+class TextLabel {
+
+    constructor(context, first_row, second_row){
+
+        this.context = context;
+        this.font_bold = fontRobotoMedium;
+        this.font_regular = fontRoboto;
+        this.font_size_first_row = style.font_size_first_row;
+        this.font_size_second_row = style.font_size_second_row;
+        this.vert_distance_factor = style.vertical_factor;
+        this.line_height = style.line_height;
+        this.selection_state = 'idle' // Idle,selected,dimmed
+        this.text_first_row = first_row;
+        this.text_second_row = second_row;
+    }
+
+    update() {
+        
+        // switch(this.selection_state){
+        //     case 'idle', 'dimmed':
+        //         this.first_row();
+        //         break;
+        //     case 'selected', 'print':
+        //         this.first_row();
+        //         this.second_row();
+        //         break;
+        // }
+
+        if (this.selection_state == 'idle' || this.selection_state == 'dimmed') {
+            this.first_row();
+        } else if (this.selection_state == 'selected' || this.selection_state == 'print') {
+            this.first_row();
+            this.second_row();
+        }
+
+
+    }
+
+    first_row(){
+
+        if(this.text_first_row != null){
+
+
+            let color, font;
+            switch(this.selection_state){
+                case 'idle':
+                    color = colors.label_1row_idle;
+                    font = this.font_regular;
+                    console.log('idle')
+                    break;
+                case 'dimmed':
+                    color = colors.label_1row_dimmed;
+                    font = this.font_regular;
+                    break;
+                case 'selected':
+                    color = colors.label_1row_selected;
+                    font = this.font_bold;
+                    break;
+                case 'print':
+                    color = colors.label_1row_print;
+                    font = this.font_bold;
+                    break;
+            }
+
+            console.log(this.text_first_row)
+            push();
+                fill(color);
+                textAlign(CENTER, TOP);
+                textFont(font);
+                text(this.text_first_row, this.context.pos.x, this.context.pos.y+this.context.radius*this.vert_distance_factor);
+                
+            pop();
+        }
+
+    }
+
+    second_row(){
+        
+        if(this.text_second_row != null){
+
+            let color, font;
+            switch(this.selection_state){
+                case 'idle':
+                    color = colors.label_2row_idle;
+                    font = this.font_regular;
+                    break;
+                case 'dimmed':
+                    color = colors.label_2row_dimmed;
+                    font = this.font_regular;
+                    break;
+                case 'selected':
+                    color = colors.label_2row_selected;
+                    font = this.font_bold;
+                    break;
+                case 'print':
+                    color = colors.label_2row_print;
+                    font = this.font_bold;
+                    break;
+            }
+    
+            push();
+                fill(color);
+                textAlign(CENTER, TOP);
+                textFont(font);
+                text(this.text_second_row, this.context.pos.x, this.context.pos.y+this.context.radius*this.vert_distance_factor+this.line_height);
+            pop();
+        
+        }
     }
 
 }

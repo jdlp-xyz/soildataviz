@@ -18,7 +18,7 @@ let bkg_color;
 // Create a local object db
 let localdb;
 // create variables to store the local data that will be loaded.
-let localdata_constituents, localdata_exhibitions, localdata_memberships, colors;
+let localdata_constituents, localdata_exhibitions, localdata_memberships, colors,style;
 
 // Preloading the fonts for the visualizarion from a local directory.
 // TODO include the local json or csv with the local database.
@@ -34,6 +34,7 @@ function preload() {
     localdata_exhibitions = loadJSON('./data/exhibitions.json');
     localdata_memberships = loadJSON('./data/membership.json');
     colors = loadJSON('./colors.json');
+    style = loadJSON('./style.json');
 
   }
 
@@ -48,6 +49,15 @@ function export_colors_to_json() {
     writer.write(JSON.stringify(colors));
     // close the PrintWriter and save the file
     writer.close();
+}
+
+function export_style_to_json() {
+  // creates a file called 'newFile.txt'
+let writer = createWriter('style.json');
+// write 'Hello world!'' to the file
+writer.write(JSON.stringify(style));
+// close the PrintWriter and save the file
+writer.close();
 }
 
 let dat_gui;
@@ -73,6 +83,7 @@ function setup() {
   let gui_functions = {}
   gui_functions['Toggle states'] = function () { test_change_state(); };
   gui_functions['Export colors'] = function () { export_colors_to_json(); };
+  gui_functions['Export style'] = function () { export_style_to_json(); };
   gui_functions['Change particle'] = function () {
     if (viz.stage.state.get_label() == 'local') {
       let random_record_id = localdb.get_random_record_id();
@@ -88,6 +99,11 @@ function setup() {
     color_gui_folder.addColor(colors, key);
   }
   color_gui_folder.add(gui_functions, 'Export colors');
+  let style_gui_folder = dat_gui.addFolder('Style');
+  for(let key in style){
+    style_gui_folder.add(style, key);
+  }
+  style_gui_folder.add(gui_functions, 'Export style');
   // color_gui_folder.addColor(colors, 'main');
   
 
@@ -95,7 +111,7 @@ function setup() {
 }
 
 function draw(){
-    noSmooth();
+    //noSmooth();
 
   
     // define center point for testing.
@@ -144,4 +160,13 @@ function windowResized() {
    
   }
 
+
+
+  // convert hex color to p5 color
+  function hexToColor(hex) {
+    let result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+    return result ? color(parseInt(result[1], 16), parseInt(result[2], 16), parseInt(result[3], 16)) : null;
+  }
+  
+  
   
