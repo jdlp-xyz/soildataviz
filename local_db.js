@@ -961,7 +961,7 @@ class MembershipNode extends DBNode {
         let year = this.semantic_id.slice(0, 4);
         
         this.year = year;
-        console.log("membership year: ", this.year);
+        // console.log("membership year: ", this.year);
     }
 
     get_year(){

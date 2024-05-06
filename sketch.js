@@ -3,6 +3,9 @@
 // TODO Wrap the app in a single class.
 let debug = true;
 
+let url_params = new URLSearchParams(window.location.search);
+if (url_params.get('print') == 'true') { console.log("Print mode activated.") }
+
 // Create visualization
 // Create a local object db
 let viz, localdb;
