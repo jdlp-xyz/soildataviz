@@ -1,12 +1,12 @@
 {
-    "font_size_first_row": 14,
-    "font_size_second_row": 12,
-    "vertical_factor": 1.5,
-    "line_height": 1.5,
-    "g_constituent_radius_max": 10,
-    "g_constituent_radius_min": 5,
-    "g_timeline_year_max": 7,
-    "g_timeline_year_min": 2,
+    "timeline_label_font_size": 20,
+    "timeline_year_font_size": 22,
+    "timeline_label_rotation": 35,
+    "g_constituent_radius_max": 92,
+    "g_constituent_radius_min": 8.2,
+    "g_timeline_year_max": 34.6,
+    "g_timeline_year_min": 12.8,
     "g_timeline_month_radius": 2.3,
-    "timeline_year_font_size": 12
+    "g_edge_weight_min": 0.5,
+    "g_edge_weight_max": 1.5
 }

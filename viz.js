@@ -14,7 +14,7 @@ class Viz {
   }
 
   get_screen_orientation() {
-    let screen_orientation = innerWidth > innerHeight;
+    let screen_orientation = width > height;
     if(screen_orientation == true){
         return 'horizontal';} else {
         return 'vertical';}
@@ -40,7 +40,7 @@ class Stage {
         this.viz_particles = [];
 
         // The quadtree of the stage.
-        this.quadtree = new QuadTree(new Rectangle(innerWidth/2, innerHeight/2, innerWidth, innerHeight),4);
+        this.quadtree = new QuadTree(new Rectangle(width/2, height/2, width, height),4);
 
         // Cascading to a new stage
         this.cascading = false;
@@ -74,16 +74,16 @@ class Stage {
 
         // Update current state.
         this.state.update();
+        this.show_debug();
 
+    }
+
+    show_debug() {
         if(debug){
-            text("Cascading: "+ this.state.cascading, 10,40);
-            text("Framerate: "+ parseInt(frameRate()), 10,60);
+            text("Framerate: "+ parseInt(frameRate()), 10,20);
+            text("Width: "+ width+" Height: "+ height, 10,40);
 
-            // Amount of cascading particles
 
-            // From viz_particles, filter all the particles that have a cascading state.
-            let particles_rippling = this.viz_particles.filter(particle => particle.state.cascade == true);
-            text("Amount of cascading particles: " + particles_rippling.length, 10,80);
         }
     }
 
@@ -114,6 +114,9 @@ class Stage {
             place_to_store = this.baked_data.node_targets.horizontal;
         } else { 
             place_to_store = this.baked_data.node_targets.vertical;}
+
+        // Clear the place to store
+        place_to_store = [];
         
         // Node targets
         let node_targets = this.state.targets.filter(target => target.userData.is_node_target == true);
@@ -123,14 +126,42 @@ class Stage {
             let target_info = {
             'is_node_target': true,
             'particle': null,
-            'db_node': node_targets[i].userData.db_node,
-            'target_pos': node_targets[i].pos,
+            'db_node_record_id': node_targets[i].userData.db_node.record_id,
+            'target_pos_x': node_targets[i].pos.x,
+            'target_pos_y': node_targets[i].pos.y
              }
             
             place_to_store.push(target_info);
         }
 
         console.log(place_to_store.length, " "+this.context.get_screen_orientation()+" node targets positions baked")
+    }
+
+    export_node_target_positions(){
+        
+        let node_target_positions = [];
+        
+        // Node targets
+        let node_targets = this.state.targets.filter(target => target.userData.is_node_target == true);
+
+        for (let i = 0; i < node_targets.length; i++) {
+            
+            let target_info = {
+            'is_node_target': true,
+            'particle': null,
+            'db_node_record_id': node_targets[i].userData.db_node.record_id,
+            'target_pos_x': node_targets[i].pos.x,
+            'target_pos_y': node_targets[i].pos.y
+             }
+            
+            node_target_positions.push(target_info);
+        }
+
+        let writer = createWriter('baked_node_targets.json');
+        // write 'Hello world!'' to the file
+        writer.write(JSON.stringify(node_target_positions));
+        // close the PrintWriter and save the file
+        writer.close();
     }
 
     // This method will start a cascading to a new state of the particles. It ment to be called once.
@@ -1235,7 +1266,8 @@ class StateStageGlobal extends StageState {
     constructor(context){
         console.log("initiating global state");
         super(context);
-        this.node_target_perception = 70;
+        // this.node_target_perception = 120;
+        this.node_target_perception = this.set_node_target_perception();
         this.timeline_target_perception = 60;
         
         this.targets = []; // Targets for the global stage
@@ -1244,7 +1276,7 @@ class StateStageGlobal extends StageState {
         // Refernces for the filtered db nodes
         this.global_db_nodes = []; // Global db nodes to be rendered
         this.filter_and_push_db_nodes(); // Get the filtered db nodes and references in global db nodes to call particles.
-        this.targets_quadtree = new QuadTree(new Rectangle(innerWidth/2, innerHeight/2, innerWidth, innerHeight),4);
+        this.targets_quadtree = new QuadTree(new Rectangle(width/2, height/2, width, height),4);
         this.build_particle_targets();
         //this.build_first_particle_target();
         
@@ -1272,15 +1304,22 @@ class StateStageGlobal extends StageState {
         free_particles.forEach(particle => {
             particle.update();
         })
+
+        constituent_particles.forEach(particle => {
+            particle.show_edges();
+        })
         timeline_month_particles.forEach(particle => {
             particle.update();
+            particle.state.show_ellipse();
         })
 
         constituent_particles.forEach(particle => {
             particle.update();
+            particle.state.show_ellipse();
         })
         timeline_year_particles.forEach(particle => {
             particle.update();
+            particle.state.show_ellipse();
         })
         
         // For testing
@@ -1288,6 +1327,18 @@ class StateStageGlobal extends StageState {
         
 
     }
+
+    // To be called at construction
+    set_node_target_perception = () => {
+        
+        // Node target perception should be a percentage of the longest side of the screen
+        let longest_side = Math.max(width, height);
+        let perception_proportion = 0.1;
+        return parseInt(longest_side * perception_proportion);
+
+
+    }
+
 
     // Transform a random free particle to a global one
     transform_particle = (record_id, target, place_in_stage) => {
@@ -1317,6 +1368,8 @@ class StateStageGlobal extends StageState {
 
         // Set the guest target
         new_particle.state.target.guest = target;
+        // Reference the particle in the target
+        target.userData.particle = new_particle;
 
         // set agent state to free
         new_particle.state.agent_state = "free";
@@ -1382,33 +1435,55 @@ class StateStageGlobal extends StageState {
         // get the screen orientation
         let screen_orientation = viz.get_screen_orientation();
 
+        let data_length;
         // get the baked data
         let baked_data;
-        if(screen_orientation == 'horizontal'){
-            baked_data = this.context.baked_data.node_targets.horizontal;
+        if(printmode == true && bakedpoints_printmode != null || !undefined){
+            baked_data = bakedpoints_printmode;
+            data_length = Object.keys(bakedpoints_printmode).length
+            
+        } else {
+            if(screen_orientation == 'horizontal'){
+                baked_data = this.context.baked_data.node_targets.horizontal;
+                data_length = baked_data.length
+            }
+
+            if(screen_orientation == 'vertical'){
+                baked_data = this.context.baked_data.node_targets.vertical;
+                data_length = baked_data.length
+            }
         }
 
-        if(screen_orientation == 'vertical'){
-            baked_data = this.context.baked_data.node_targets.vertical;
-        }
-
+        console.log("baked data length: ", data_length)
+            
         // build the node targets
-        for(let i = 0; i < baked_data.length; i++){
-            this.build_particle_target(baked_data[i].db_node, true, {'posx': baked_data[i].target_pos.x, 'posy': baked_data[i].target_pos.y});
+        for(let i = 0; i < data_length; i++){
+            this.build_particle_target(get_single_node_anywhere(baked_data[i].db_node_record_id), true, {'posx': baked_data[i].target_pos_x, 'posy': baked_data[i].target_pos_y});
         }
     }
 
     check_baked_data(screen_orientation){
 
-        if(screen_orientation == 'horizontal'){
-            let is_baked_data = this.context.baked_data.node_targets.horizontal.length > 0
-            return is_baked_data;
+        if(printmode == true){
+            if (bakedpoints_printmode == null || undefined){
+                console.log("no baked data available. returning false")
+                return false;
+            } else {
+                return true;
+            }
+        } 
+        else {
+            if(screen_orientation == 'horizontal'){
+                let is_baked_data = this.context.baked_data.node_targets.horizontal.length > 0
+                return is_baked_data;
+            }
+    
+            if(screen_orientation == 'vertical'){
+                let is_baked_data = this.context.baked_data.node_targets.vertical.length > 0
+                return is_baked_data;
+            }
         }
-
-        if(screen_orientation == 'vertical'){
-            let is_baked_data = this.context.baked_data.node_targets.vertical.length > 0
-            return is_baked_data;
-        }
+        
 
     }
 
@@ -1450,8 +1525,8 @@ class StateStageGlobal extends StageState {
         }
         // If is not from baked data, build a random particle target
         else {
-            let randomx = random(0, innerWidth);
-            let randomy = random(0, innerHeight);
+            let randomx = random(0, width);
+            let randomy = random(0, height);
             let user_data = {
                 'is_node_target': true,
                 'particle': null,
@@ -1649,7 +1724,7 @@ class VizParticle {
     constructor(context){
 
         // Position, physics.
-        this.pos = createVector(random(innerWidth), random(innerHeight));
+        this.pos = createVector(random(width), random(height));
         this.vel = createVector(0,0);
         this.acc = createVector(0,0);
         this.mass = 1;
@@ -1680,6 +1755,8 @@ class VizParticle {
         // Random walk variation
         this.random_variation = 1;
 
+        this.selection_state = 'idle' // Idle,selected,dimmed
+
 
     }
 
@@ -1705,24 +1782,48 @@ class VizParticle {
         
     }
 
+
+  
+
     // TODO: This needs to be rewritten.
     show_edges(){
 
         if(this.userData.db_node != null){
-                // get the present neighbours
+
+                let strokeEdge_weight = 0.5;
+
                 let present_neighbours = this.context.state.get_present_neighbours(this);
+
+                // Calculate the stroke weight based on the connections
+                // if(this.state.get_label() == "global"){
+                    
+                //     strokeEdge_weight = map(this.state.get_engagement_by_membership(), 0, 1, style.g_edge_weight_min, style.g_edge_weight_max);
+                // }
+                // get the present neighbours
+                
 
                 // if there are no neighbours, return
                 if(present_neighbours.length == 0){
                     return;
                 }
-                //console.log(present_neighbours)
+                
                 push();
 
                 // for each neighbor, draw a line to it
                 present_neighbours.forEach(neighbor => {
-                    stroke(hexToColor(colors.edges_idle));
-                    strokeWeight(0.2)
+                    
+                    if(this.selection_state == 'idle'){
+                        stroke(hexToColor(colors.edges_idle));
+                        
+                        strokeWeight(strokeEdge_weight)
+                    } else if (this.selection_state == 'selected'){
+                        stroke(hexToColor(colors.edges_selected));
+                        strokeWeight(strokeEdge_weight)
+                    } else if (this.selection_state == 'dimmed'){
+                        stroke(hexToColor(colors.edges_dimmed));
+                        strokeWeight(strokeEdge_weight)
+                    }
+
                     line(this.pos.x, this.pos.y, neighbor.pos.x, neighbor.pos.y);
                 })
 
@@ -2390,6 +2491,7 @@ class VizParticleStateGlobal extends VizParticleState {
     }
 
     update() {
+            this.context.selection_state = 'idle'
 
             // console.log("starting update in particle", this.context.label, "with place in stage", this.place_in_stage)
 
@@ -2410,8 +2512,8 @@ class VizParticleStateGlobal extends VizParticleState {
             this.context.update_physics();
 
             this.calculate_color();
-            this.context.show_edges();
-            this.show_ellipse();
+            // this.context.show_edges();
+            // this.show_ellipse();
             this.show_label();
             // this.show_agent_debug();
 
@@ -2433,9 +2535,9 @@ class VizParticleStateGlobal extends VizParticleState {
             case "constituent":
                 push();
                 textFont(fontRobotoMedium);
-                textSize(10);
+                textSize(style.timeline_label_font_size);
                 translate(this.context.pos.x, this.context.pos.y);
-                rotate(35 * Math.PI / 180);
+                rotate(style.timeline_label_rotation * Math.PI / 180);
                 fill(hexToColor(colors.label_1row_idle));
                 text(this.context.userData.db_node.get_label(),this.context.radius+3, 2);
                 pop();
@@ -2534,7 +2636,12 @@ class VizParticleStateGlobal extends VizParticleState {
                 // console.log(hexToColor(colors.constituent_low))
                 // this.color = 'red'
                 // this.color = hexToColor(colors.constituent_low);
-                this.color = visualize_engagement_color(hexToColor(colors.constituent_low), hexToColor(colors.constituent_high));
+
+                if(this.selection_state == 'selected'){this.color = 'red'} 
+                else {
+                    this.color = visualize_engagement_color(hexToColor(colors.constituent_low), hexToColor(colors.constituent_high));
+                }
+
                 // console.log("calculated color: ",this.color.r, this.color.g, this.color.b)
                 break;
 
@@ -2639,7 +2746,7 @@ class VizTargetLocal{
 
         // If its the same particle, set the position to the center
         if(this.host_particle == this.guest_particle){
-            this.host_particle_pos = createVector(innerWidth/2, innerHeight/2);   
+            this.host_particle_pos = createVector(width/2, height/2);   
         } else {
             this.host_particle_pos = createVector(this.host_particle.pos.x, this.host_particle.pos.y);
         }
@@ -2807,7 +2914,7 @@ class VizTargetGlobal {
 
         //  If this is node target
         this.initial_direction = this.set_initial_direction();
-        this.acceptable_distance_from_initial_direction = 100;
+        this.acceptable_distance_from_initial_direction = 50;
         this.placement_state = 'moving'
         
     }
@@ -2825,6 +2932,7 @@ class VizTargetGlobal {
             
             if(this.placement_state == 'moving'){
                 this.check_collision_with_targets();
+                this.wrap_screen();
                 this.apply_node_target_forces();
                 this.update_physics();
             
@@ -2838,6 +2946,13 @@ class VizTargetGlobal {
         // Show
         // this.show_debug();
 
+    }
+
+    wrap_screen() {
+        if (this.pos.x > width) this.pos.x = 0;
+        if (this.pos.x < 0) this.pos.x = width;
+        if (this.pos.y > height) this.pos.y = 0;
+        if (this.pos.y < 0) this.pos.y = height;
     }
 
     // this method only checks for the conditions to switch placement state
@@ -2874,9 +2989,9 @@ class VizTargetGlobal {
         
 
         const try_again = () => {
-            this.pos.x = random(innerWidth);
-            this.pos.y = random(innerHeight);
-            this.acceptable_distance_from_initial_direction = this.acceptable_distance_from_initial_direction + 10;
+            this.pos.x = random(width);
+            this.pos.y = random(height);
+            this.acceptable_distance_from_initial_direction = this.acceptable_distance_from_initial_direction + 5;
             this.placement_state = 'moving';
         }
     }
@@ -3203,7 +3318,7 @@ class TimelineGlobal{
 
         // Define the target on january
         let years_timeline_targets = this.targets.filter(target => target.userData.timeline.month == 1)
-        console.log("years_timeline_targets",years_timeline_targets)
+        // console.log("years_timeline_targets",years_timeline_targets)
         years_timeline_targets.forEach(target => this.context.transform_particle(target.userData.db_node.record_id,target,'timeline_year') );
 
         // Call a particle on each month

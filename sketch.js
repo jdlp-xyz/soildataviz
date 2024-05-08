@@ -3,15 +3,19 @@
 // TODO Wrap the app in a single class.
 let debug = true;
 
-let url_params = new URLSearchParams(window.location.search);
-if (url_params.get('print') == 'true') { console.log("Print mode activated.") }
+
+// Create url parameters
+let printmode;
+let print_width = 2895;
+let print_height = 3544;
+
 
 // Create visualization
 // Create a local object db
-let viz, localdb;
+let viz, localdb, mycanvas, input;
 
 // create variables to store the local data that will be loaded.
-let localdata_constituents, localdata_memberships, colors, style;
+let localdata_constituents, localdata_memberships, colors, style, bakedpoints_printmode;
 
 // Preloading the fonts for the visualizarion from a local directory.
 function preload() {
@@ -24,6 +28,7 @@ function preload() {
     localdata_constituents = loadJSON('./data/test/constituents_5_5_2024.json');
     // localdata_exhibitions = loadJSON('./data/exhibitions.json');
     localdata_memberships = loadJSON('./data/test/membership_5_5_2024.json');
+    bakedpoints_printmode = loadJSON('./baked_node_targets.json');
     
     // Style
     colors = loadJSON('./colors.json');
@@ -52,14 +57,25 @@ writer.close();
 let dat_gui;
 
 function setup() {
+  // pixelDensity(1);
+  handle_print_mode()
+  
+  // Create canvas
+  // TODO Make the canvas rezisable and adaptable to different screens.
+  if(printmode){mycanvas = createCanvas(2895 , 3544);
+    console.log("creating print canvas", print_width, print_height);
+  }
+  else{mycanvas = createCanvas(windowWidth, windowHeight);}
+
+  
 
   // Initialize the local database
   localdb = new LocalDB();
   viz = new Viz(localdb);
 
-  // Create canvas
-  // TODO Make the canvas rezisable and adaptable to different screens.
-  createCanvas(windowWidth, windowHeight);
+  // Initialize input handler
+  input = new VizInput(viz.stage);
+  
 
   // Secuence of functions to initialize the local database before drawing the network.
   // The last method builds the visualization, after the local database is ready.
@@ -73,6 +89,9 @@ function setup() {
   gui_functions['Toggle states'] = function () { test_change_state(); };
   gui_functions['Export colors'] = function () { export_colors_to_json(); };
   gui_functions['Export style'] = function () { export_style_to_json(); };
+  gui_functions['Save image'] = function () { capture_image(); };
+  gui_functions['Export node targets'] = function () { viz.stage.export_node_target_positions(); };
+  
   gui_functions['Change particle'] = function () {
     if (viz.stage.state.get_label() == 'local') {
       let random_record_id = localdb.get_random_record_id();
@@ -82,6 +101,9 @@ function setup() {
   //
   dat_gui.add(gui_functions, 'Toggle states');
   dat_gui.add(gui_functions, 'Change particle');
+  dat_gui.add(gui_functions, 'Save image');
+  dat_gui.add(gui_functions, 'Export node targets');
+  
   let color_gui_folder = dat_gui.addFolder('Colors');
 
   for(let key in colors){
@@ -108,14 +130,18 @@ function draw(){
 
     background(colors.background)
     if(localdb.is_ready){
-
+      
+      
+      input.update();
       viz.update();
 
     }
 }
 
 function windowResized() {
-    resizeCanvas(windowWidth, windowHeight);
+    if(!printmode){
+      resizeCanvas(windowWidth, windowHeight);
+    }
   }
 
  
@@ -157,5 +183,37 @@ function windowResized() {
     return result ? color(parseInt(result[1], 16), parseInt(result[2], 16), parseInt(result[3], 16)) : null;
   }
   
-  
+function handle_print_mode() {
+
+  // Search for url parameters
+  let url_params = new URLSearchParams(window.location.search);
+
+  // Establush default values
+  printmode = false;
+  // print_width = 2895;
+  // print_height = 3544;
+
+
+  // If printmode activated from url
+  if (url_params.get('printmode') != null || !undefined && url_params.get('printmode') == 'true')
+     { 
+      console.log("Print mode activated."); 
+      printmode = true; 
+      document.body.style.overflow = 'auto';
+      var canvas = document.querySelector('canvas');
+      canvas.style.overflow = 'auto';
+
+
+     }
+
+  // Set width and height for print from url
+  if (url_params.get('w') != null || !undefined && url_params.get('h') != null || !undefined && printmode == true) { console.log("Setting width and height for print."); print_width = url_params.get('w'); print_height = url_params.get('h'); }
+}
+
+function capture_image(){
+  let timestamp = month()+'_'+day()+'_'+year()+'_'+hour()+'_'+minute(); 
+  let filename = 'soil_roots_unearted_'+timestamp;
+  saveCanvas(mycanvas, filename, 'png')
+}
+
   

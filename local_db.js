@@ -664,7 +664,7 @@ class ConstituentsNode extends DBNode {
             for (let i = 0; i < this.membership_nodes.length; i++){
                 //console.log("membership node: ", this.membership_nodes[i])
                 // let year = get_single_node_anywhere(this.membership_nodes[i].year_record_id).semantic_id;
-                console.log(this.membership_nodes[i].year)
+                // console.log(this.membership_nodes[i].year)
                 let year = this.membership_nodes[i].get_year();
                 // year = year.toString();
                 years_array.push(year);
