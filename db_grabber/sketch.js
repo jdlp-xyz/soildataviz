@@ -17,6 +17,7 @@ let startbutton, btn_download_files_as_json, download_const_json_button;
 // Local objects to be converted to json files
 let constituents = [];
 let membership = [];
+let exhibitions = [];
 
 function setup() {
   // createCanvas(400, 400);
@@ -33,11 +34,12 @@ function grab_databases() {
   //erase start button
   startbutton.remove();
   grab_constituents(constituents)
+      .then(() => { grab_exhibitions(exhibitions) })
       .then(() => { grab_membership(membership) })
       .then(() => {
 
         btn_download_files_as_json = createButton('Download JSON files');
-        btn_download_files_as_json.mousePressed(() => {object_to_json(membership, 'membership'); object_to_json(constituents, 'constituents')});
+        btn_download_files_as_json.mousePressed(() => {object_to_json(membership, 'membership'); object_to_json(constituents, 'constituents'); object_to_json(exhibitions, 'exhibitions');});
     
   });
 }
@@ -135,6 +137,44 @@ function grab_membership(output_array){
     );
   });
 
+}
+
+function grab_exhibitions(output_array){
+
+
+  return new Promise((resolve, reject) => {
+    createP("Fetching data from the Exhibitions table and adding it to local object");
+
+    base('Exhibitions').select({
+      // view: "Grid view",
+    }).eachPage(
+      function page(records, fetchNextPage) {
+        records.forEach(function (record) {
+          
+
+          output_array.push(
+            {
+              'record_id': record.id,
+              'semantic_id': record.get('Exhibition Title'),
+              'year': record.get('Year'),
+              'artists_record_ids': record.get('Artist ID')
+            }
+          )
+
+        });
+        fetchNextPage();
+      },
+      function done(err) {
+        if (err) {
+          console.error(err);
+          reject(err); // Reject the Promise on error
+        } else {
+          createP("Done fetching data. Grabbed " + exhibitions.length + " exhibitions.")
+          resolve(); // Resolve the Promise when done
+        }
+      }
+    );
+  });
 
 }
 

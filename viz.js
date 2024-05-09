@@ -74,7 +74,7 @@ class Stage {
 
         // Update current state.
         this.state.update();
-        this.show_debug();
+        // this.show_debug();
 
     }
 
@@ -1305,21 +1305,29 @@ class StateStageGlobal extends StageState {
             particle.update();
         })
 
-        constituent_particles.forEach(particle => {
-            particle.show_edges();
-        })
+        
         timeline_month_particles.forEach(particle => {
             particle.update();
             particle.state.show_ellipse();
         })
 
-        constituent_particles.forEach(particle => {
-            particle.update();
-            particle.state.show_ellipse();
-        })
+       
         timeline_year_particles.forEach(particle => {
             particle.update();
             particle.state.show_ellipse();
+        })
+
+        constituent_particles.forEach(particle => {
+            particle.show_edges();
+        })
+        constituent_particles.forEach(particle => {
+            particle.update();
+            particle.state.show_ellipse();
+            particle.state.show_label();
+        })
+        timeline_year_particles.forEach(particle => {
+            
+            particle.state.show_label();
         })
         
         // For testing
@@ -2514,7 +2522,7 @@ class VizParticleStateGlobal extends VizParticleState {
             this.calculate_color();
             // this.context.show_edges();
             // this.show_ellipse();
-            this.show_label();
+            // this.show_label();
             // this.show_agent_debug();
 
             // Cascade 
@@ -2545,10 +2553,10 @@ class VizParticleStateGlobal extends VizParticleState {
             case "timeline_year":
                 let textstring = this.context.userData.db_node.get_year();
                 push()
-                textFont(fontRobotoMedium);
+                textFont(robotoBlack);
                 textSize(style.timeline_year_font_size);
-                fill(hexToColor(colors.global_timeline_year_low));
-                text(textstring, this.context.pos.x+this.context.radius, this.context.pos.y + 20);
+                fill(hexToColor(colors.timeline_year_label));
+                text(textstring, this.context.pos.x+this.context.radius+5, this.context.pos.y + 20);
                 pop()
                 break;
         }

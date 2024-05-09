@@ -103,30 +103,30 @@ class LocalDB {
             
 
 
-            // Exhibitions
+           // Exhibitions
 
-            // for (let i = 0; i < Object.keys(localdata_exhibitions).length; i++) {
+            for (let i = 0; i < Object.keys(localdata_exhibitions).length; i++) {
 
-            //     this.exhibition_nodes.push(
+                this.exhibition_nodes.push(
 
-            //         new ExhibitionNode(
+                    new ExhibitionNode(
                         
-            //             localdata_exhibitions[i].semantic_id,
-            //             localdata_exhibitions[i].record_id,
-            //             localdata_exhibitions[i].exhibition_title,
-            //             localdata_exhibitions[i].year_record_id,
-            //             localdata_exhibitions[i].artist_record_ids,
-            //             // TODO Integrate curators in a next iteration.
-            //             //localdata_exhibitions[i].curator_record_ids
+                        localdata_exhibitions[i].semantic_id,
+                        localdata_exhibitions[i].record_id,
+                        localdata_exhibitions[i].semantic_id,
+                        localdata_exhibitions[i].year_record_id,
+                        localdata_exhibitions[i].artists_record_ids,
+                        // TODO Integrate curators in a next iteration.
+                        //localdata_exhibitions[i].curator_record_ids
 
 
-            //         )
+                    )
 
-            //         // Optional
-            //         //url
+                    // Optional
+                    //url
 
-            //     )
-            // }
+                )
+            }
             console.log("Building objects from json data...");
             resolve();
         })
@@ -204,7 +204,7 @@ class LocalDB {
 
         
         // Pick randomly the kind of node.
-        let node_arrays = [this.constituents_nodes, this.membership_nodes] //this.exhibition_nodes, this.membership_nodes, this.years_nodes];
+        let node_arrays = [this.constituents_nodes, this.membership_nodes, this.exhibition_nodes] //this.exhibition_nodes, this.membership_nodes, this.years_nodes];
         let random_array = node_arrays[parseInt(random(node_arrays.length))];
         let random_node = random_array[parseInt(random(random_array.length))];
         let random_record_id = random_node.record_id;

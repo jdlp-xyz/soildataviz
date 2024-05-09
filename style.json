@@ -1,12 +1,1 @@
-{
-    "timeline_label_font_size": 20,
-    "timeline_year_font_size": 22,
-    "timeline_label_rotation": 35,
-    "g_constituent_radius_max": 92,
-    "g_constituent_radius_min": 8.2,
-    "g_timeline_year_max": 34.6,
-    "g_timeline_year_min": 12.8,
-    "g_timeline_month_radius": 2.3,
-    "g_edge_weight_min": 0.5,
-    "g_edge_weight_max": 1.5
-}
+{"timeline_label_font_size":11,"timeline_year_font_size":14,"timeline_label_rotation":35,"g_constituent_radius_max":49,"g_constituent_radius_min":4.1,"g_timeline_year_max":16,"g_timeline_year_min":8,"g_timeline_month_radius":2.3,"g_edge_weight_min":0.5,"g_edge_weight_max":1.5}

@@ -13,6 +13,7 @@ let print_height = 3544;
 // Create visualization
 // Create a local object db
 let viz, localdb, mycanvas, input;
+let robotoBlack;
 
 // create variables to store the local data that will be loaded.
 let localdata_constituents, localdata_memberships, colors, style, bakedpoints_printmode;
@@ -23,10 +24,11 @@ function preload() {
     // Load fonts
     fontRoboto = loadFont('./fonts/Roboto-Medium.ttf');
     fontRobotoMedium = loadFont('./fonts/Roboto-Medium.ttf');
+    robotoBlack = loadFont('./fonts/Roboto-Black.ttf');
 
     // Data
     localdata_constituents = loadJSON('./data/test/constituents_5_5_2024.json');
-    // localdata_exhibitions = loadJSON('./data/exhibitions.json');
+    localdata_exhibitions = loadJSON('./data/exhibitions_5_8_2024.json');
     localdata_memberships = loadJSON('./data/test/membership_5_5_2024.json');
     bakedpoints_printmode = loadJSON('./baked_node_targets.json');
     
