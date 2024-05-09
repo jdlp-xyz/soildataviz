@@ -20,8 +20,18 @@ class Viz {
         return 'vertical';}
         
     }
-  }
+  
 
+  get_screen_size_by_width() {
+    if (720 < width && width < 1500) {
+        return 'middle';
+    } else if (width < 720) {
+        return 'small';
+    } else if (width > 1500) {
+        return 'large';
+    }
+  }
+}
 
 class Stage {
     constructor(context, localdb) {
@@ -74,7 +84,7 @@ class Stage {
 
         // Update current state.
         this.state.update();
-        // this.show_debug();
+        this.show_debug();
 
     }
 
@@ -157,9 +167,17 @@ class Stage {
             node_target_positions.push(target_info);
         }
 
+        let object_to_export = {
+            'points': node_target_positions,
+            'previous_margins': {
+                'horizontal': this.state.timeline.margin_horizontal,
+                'vertical': this.state.timeline.margin_vertical
+            }
+        }
+
         let writer = createWriter('baked_node_targets.json');
         // write 'Hello world!'' to the file
-        writer.write(JSON.stringify(node_target_positions));
+        writer.write(JSON.stringify(object_to_export));
         // close the PrintWriter and save the file
         writer.close();
     }
@@ -1425,72 +1443,55 @@ class StateStageGlobal extends StageState {
 
     build_particle_targets(){
 
-        // get the screen orientation
-        let screen_orientation = viz.get_screen_orientation();
-
         // check if there are baked data for the screen orientation
-        let is_baked_data_available = this.check_baked_data(screen_orientation);
+        let is_baked_data_available = this.get_baked_data().is_baked_data_available;
 
-        if(is_baked_data_available){
+        if(is_baked_data_available == true){
             this.build_node_targets_from_baked_data();
         } else {
             this.build_first_particle_target();
         }
     }
 
-    build_node_targets_from_baked_data(){
+    build_node_targets_from_baked_data() {
         console.log("building node targets from baked data")
         // get the screen orientation
         let screen_orientation = viz.get_screen_orientation();
 
-        let data_length;
-        // get the baked data
-        let baked_data;
-        if(printmode == true && bakedpoints_printmode != null || !undefined){
-            baked_data = bakedpoints_printmode;
-            data_length = Object.keys(bakedpoints_printmode).length
-            
-        } else {
-            if(screen_orientation == 'horizontal'){
-                baked_data = this.context.baked_data.node_targets.horizontal;
-                data_length = baked_data.length
-            }
+        let baked_data = this.get_baked_data().baked_data_object.points;
+        let baked_data_previous_margins = this.get_baked_data().baked_data_object.previous_margins;
+        let data_length = Object.keys(baked_data).length
 
-            if(screen_orientation == 'vertical'){
-                baked_data = this.context.baked_data.node_targets.vertical;
-                data_length = baked_data.length
-            }
-        }
-
-        console.log("baked data length: ", data_length)
-            
+        let timeline_margins = {'horizontal': this.timeline.margin_horizontal -baked_data_previous_margins['horizontal'], 
+                                'vertical': this.timeline.margin_vertical- baked_data_previous_margins['vertical']};
+       
         // build the node targets
-        for(let i = 0; i < data_length; i++){
-            this.build_particle_target(get_single_node_anywhere(baked_data[i].db_node_record_id), true, {'posx': baked_data[i].target_pos_x, 'posy': baked_data[i].target_pos_y});
+        for (let i = 0; i < data_length; i++) {
+            this.build_particle_target(get_single_node_anywhere(baked_data[i].db_node_record_id), true, { 'posx': baked_data[i].target_pos_x+timeline_margins['horizontal'], 'posy': baked_data[i].target_pos_y +timeline_margins['vertical'] });
         }
     }
 
-    check_baked_data(screen_orientation){
-
+    get_baked_data(){
+        let is_printmode_on = printmode;
+        let screen_size = viz.get_screen_size_by_width();
+        let screen_orientation = viz.get_screen_orientation();
+        
+        // Print or screen size
+        let print_or_screensize;
         if(printmode == true){
-            if (bakedpoints_printmode == null || undefined){
-                console.log("no baked data available. returning false")
-                return false;
-            } else {
-                return true;
-            }
-        } 
-        else {
-            if(screen_orientation == 'horizontal'){
-                let is_baked_data = this.context.baked_data.node_targets.horizontal.length > 0
-                return is_baked_data;
-            }
-    
-            if(screen_orientation == 'vertical'){
-                let is_baked_data = this.context.baked_data.node_targets.vertical.length > 0
-                return is_baked_data;
-            }
+            print_or_screensize = 'print';
+        } else{
+            print_or_screensize = screen_size;
         }
+
+        let baked_data_object = baked_points[screen_orientation][print_or_screensize];
+        
+        // Is the baked data available?
+        let is_baked_data_available = baked_data_object != null;
+        console.log("Get baked data: is_baked_data_available: ", is_baked_data_available, "printmode: ", printmode, "screen_size: ", screen_size, "screen_orientation: ", screen_orientation, "print_or_screensize: ", print_or_screensize, "baked_data_object: ", baked_data_object);
+        return {
+            'is_baked_data_available': is_baked_data_available, 
+            'baked_data_object': baked_data_object}
         
 
     }
@@ -3261,8 +3262,31 @@ class TimelineGlobal{
             if (viz.get_screen_orientation() == 'horizontal') {
                 // Make a horizontal curve
                 this.screen_orientation = 'horizontal';
-                y = lerp(0, height, map(sin(index / (this.points_amount / 6.5)), 0, 1, 0.5, 0.9));
-                x = lerp(0, width, map(index, -30, this.points_amount + 30, 0, 1))
+                
+                let timeline_height;
+                let timeline_width;
+                // 720 - 1200 width
+                if (viz.get_screen_size_by_width() == 'middle') {
+                    timeline_width = 990;
+                    timeline_height = 700;
+                    console.log("middle screeen")
+                } else if (viz.get_screen_size_by_width() == 'small') {
+                    timeline_width = 1200;
+                    timeline_height = 700;
+                    console.log("small screen")
+                } else if (viz.get_screen_size_by_width() == 'large') {
+                    timeline_width = 1400;
+                    timeline_height = 700;
+                    console.log("large screen")
+                }
+
+                this.margin_horizontal = (width - timeline_width) / 2;
+                this.margin_vertical = (height - timeline_height) / 2;
+                let margin_ver = this.margin_vertical;
+                let margin_hor = this.margin_horizontal;
+
+                y = lerp(margin_ver, margin_ver+timeline_height, map(sin(index / (this.points_amount / 6.5)), 0, 1, 0.5, 0.9));
+                x = lerp(margin_hor, margin_hor+timeline_width, map(index, -30, this.points_amount + 30, 0, 1))
             } else {
                 // Make a vertical curve
                 this.screen_orientation = 'vertical';

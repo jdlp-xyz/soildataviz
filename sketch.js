@@ -8,6 +8,7 @@ let debug = true;
 let printmode;
 let print_width = 2895;
 let print_height = 3544;
+let baked_points;
 
 
 // Create visualization
@@ -30,8 +31,23 @@ function preload() {
     localdata_constituents = loadJSON('./data/test/constituents_5_5_2024.json');
     localdata_exhibitions = loadJSON('./data/exhibitions_5_8_2024.json');
     localdata_memberships = loadJSON('./data/test/membership_5_5_2024.json');
-    bakedpoints_printmode = loadJSON('./baked_node_targets.json');
-    
+
+
+    baked_points = { 
+      'horizontal' : {
+        'printmode': null, 
+        'middle': loadJSON('./baked_node_targets_middle.json'), 
+        'large': loadJSON('./baked_node_targets_large.json'), 
+        'small': null
+      },
+      'vertical': {
+        'printmode': loadJSON('./baked_node_targets.json'),
+        'middle': null,
+        'large': null,
+        'small': null
+      }
+};
+
     // Style
     colors = loadJSON('./colors.json');
     style = loadJSON('./style.json');
