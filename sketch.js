@@ -23,7 +23,7 @@ let localdata_constituents, localdata_memberships, colors, style, bakedpoints_pr
 function preload() {
   
     // Load fonts
-    fontRoboto = loadFont('./fonts/Roboto-Medium.ttf');
+    fontRoboto = loadFont('./fonts/Roboto-Regular.ttf');
     fontRobotoMedium = loadFont('./fonts/Roboto-Medium.ttf');
     robotoBlack = loadFont('./fonts/Roboto-Black.ttf');
 
@@ -99,41 +99,40 @@ function setup() {
   // The last method builds the visualization, after the local database is ready.
 
   // Dat.gui controls
-  //color_controls = new dat.GUI();
-  //color_controls.add(bkg_color, 'r', 0, 255);
-  dat_gui = new dat.GUI();
 
-  let gui_functions = {}
-  gui_functions['Toggle states'] = function () { test_change_state(); };
-  gui_functions['Export colors'] = function () { export_colors_to_json(); };
-  gui_functions['Export style'] = function () { export_style_to_json(); };
-  gui_functions['Save image'] = function () { capture_image(); };
-  gui_functions['Export node targets'] = function () { viz.stage.export_node_target_positions(); };
-  
-  gui_functions['Change particle'] = function () {
-    if (viz.stage.state.get_label() == 'local') {
-      let random_record_id = localdb.get_random_record_id();
-      viz.stage.state.transform_local_network(random_record_id);
-    }
-  };
-  //
-  dat_gui.add(gui_functions, 'Toggle states');
-  dat_gui.add(gui_functions, 'Change particle');
-  dat_gui.add(gui_functions, 'Save image');
-  dat_gui.add(gui_functions, 'Export node targets');
-  
-  let color_gui_folder = dat_gui.addFolder('Colors');
+  // dat_gui = new dat.GUI();
 
-  for(let key in colors){
-    color_gui_folder.addColor(colors, key);
-  }
-  color_gui_folder.add(gui_functions, 'Export colors');
-  let style_gui_folder = dat_gui.addFolder('Style');
-  for(let key in style){
-    style_gui_folder.add(style, key);
-  }
-  style_gui_folder.add(gui_functions, 'Export style');
-  // color_gui_folder.addColor(colors, 'main');
+  // let gui_functions = {}
+  // gui_functions['Toggle states'] = function () { test_change_state(); };
+  // gui_functions['Export colors'] = function () { export_colors_to_json(); };
+  // gui_functions['Export style'] = function () { export_style_to_json(); };
+  // gui_functions['Save image'] = function () { capture_image(); };
+  // gui_functions['Export node targets'] = function () { viz.stage.export_node_target_positions(); };
+  
+  // gui_functions['Change particle'] = function () {
+  //   if (viz.stage.state.get_label() == 'local') {
+  //     let random_record_id = localdb.get_random_record_id();
+  //     viz.stage.state.transform_local_network(random_record_id);
+  //   }
+  // };
+  // //
+  // dat_gui.add(gui_functions, 'Toggle states');
+  // dat_gui.add(gui_functions, 'Change particle');
+  // dat_gui.add(gui_functions, 'Save image');
+  // dat_gui.add(gui_functions, 'Export node targets');
+  
+  // let color_gui_folder = dat_gui.addFolder('Colors');
+
+  // for(let key in colors){
+  //   color_gui_folder.addColor(colors, key);
+  // }
+  // color_gui_folder.add(gui_functions, 'Export colors');
+  // let style_gui_folder = dat_gui.addFolder('Style');
+  // for(let key in style){
+  //   style_gui_folder.add(style, key);
+  // }
+  // style_gui_folder.add(gui_functions, 'Export style');
+  // // color_gui_folder.addColor(colors, 'main');
   
 
 
@@ -179,7 +178,7 @@ function windowResized() {
     // Toggle the state
     
     console.log("changing stage state to " + possible_states[selected_state]);
-    viz.stage.set_stage_state(possible_states[selected_state]);
+    viz.stage.set_stage_state(possible_states[selected_state], null);
     
     // move the selected state one step
     // if(selected_state == 0){
@@ -234,4 +233,11 @@ function capture_image(){
   saveCanvas(mycanvas, filename, 'png')
 }
 
-  
+function mouseReleased() {
+
+  input.mouseReleased();
+
+  // if (viz.stage.state instanceof StateStageGlobal) {
+  //   input.click_to_local_view();
+  // }
+}

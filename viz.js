@@ -3,6 +3,8 @@ class Viz {
   constructor(localdb) {
 
     this.localdb = localdb;
+    this.screen_orientation = this.get_screen_orientation();
+    this.screen_size = this.get_screen_size_by_width();
     this.stage = new Stage(this, localdb);
 
   }
@@ -56,7 +58,8 @@ class Stage {
         this.cascading = false;
 
         // State of the stage. It can be local, global and others implemented later.
-        this.state = new StateStageFree(this);
+        // this.state = new StateStageFree(this);
+        
         this.old_state = null;
         this.baked_data = {
             'node_targets' : {
@@ -74,17 +77,22 @@ class Stage {
             this.viz_particles.push(new VizParticle(this, "free"));
         }
 
+        this.state = new StateStageFree(this);
+
        
     }
 
     update() {
 
+        // if(this.state.label = "free"){
+        //     this.state = new StateStageGlobal(this);
+        // }
         // Update quadtree where the particles are referenced.
         this.update_quadtree();
 
         // Update current state.
         this.state.update();
-        this.show_debug();
+        // this.show_debug();
 
     }
 
@@ -262,10 +270,16 @@ class Stage {
         return this.state;
     }
 
-    // Changes the stages state
-    set_stage_state(target_state_string, extra_data)    {
+    set_stage_to_local(record_id){
 
-        console.log("changing state to:", target_state_string)        
+        this.state = new StateStageLocal(this, record_id);
+    }
+    // Changes the stages state
+    async set_stage_state(target_state_string)    {
+
+        new Promise((resolve, reject) => {
+
+            console.log("changing state to:", target_state_string)        
         // Keep the old state if there's one
         if(this.state != null){this.old_state = this.state;}
 
@@ -274,19 +288,27 @@ class Stage {
         
             case 'free':
                 this.state = new StateStageFree(this)
+                resolve();
                 break;
             case 'local':
                 this.state = new StateStageLocal(this, 'rec1CDshlHNbEqN01') // for testing only
                 console.log("changed state to:", this.state);
+                resolve();
                 break;
             case 'global':
                 this.state = new StateStageGlobal(this);
+                resolve();
                 break;
             default:
                 this.state = new StateStageFree(this)
+                resolve();
                 break;
 
         }
+        })
+        // if (extra_data != null && target_state_string == 'local'){extra_data = 'rec1CDshlHNbEqN01';}
+
+        
 
     }
     
@@ -328,6 +350,7 @@ class StateStageFree extends StageState {
         // Unlock all the particles
         for(let i = 0; i < this.context.viz_particles.length; i++){
             this.context.viz_particles[i].state.unlock_state();
+            this.context.viz_particles[i].set_state("free");
         }
 
         // Particles are free?
@@ -341,13 +364,28 @@ class StateStageFree extends StageState {
     update(){
 
          // Cascade all the particles to the free state
-         this.update_free_particles();
+        //  this.update_free_particles();
+
 
         // simply passes the update function to each viz particle
         for(let i = 0; i < this.context.viz_particles.length; i++){
             this.context.viz_particles[i].update();
         }
 
+
+        // Preview message
+        push()
+        textFont(fontRoboto)
+        textSize(15)
+        text("SOIL Gallery’s Digital ARCHIVE Project: ", width/2-400, height/2-50, 400, 300);
+        textSize(32)
+        textFont(fontRobotoMedium)
+        text("Artistic Roots Unearthed Data Visualization preview", width/2-400, height/2+20-50, 400, 300);
+        textSize(15)
+        textFont(fontRoboto)
+        fill(50)
+        text("Tap anywhere to see timeline.", width/2-400, height/2-50+150, 400, 300);
+        pop()
         //If the particles are cascading, update them.
         // if(this.context.cascading){this.context.update_cascading();}
 
@@ -476,7 +514,7 @@ class StateStageLocal extends StageState {
                 
                 let particle_first_neighbour = secondary[i].context.state.get_present_neighbours_for_secondary(secondary[i])[0];
 
-                console.log("particle_first_neigbour",particle_first_neighbour)
+                // console.log("particle_first_neigbour",particle_first_neighbour)
                 let target = new VizTargetLocal(particle_first_neighbour, secondary[i]);
                 particle_first_neighbour.state.target.host.push(target);
                 secondary[i].state.target.guest = target;
@@ -510,7 +548,7 @@ class StateStageLocal extends StageState {
             // console.log(focused_nodes)
             // Particle record id
             let particle_record_id = particle.userData.db_node.record_id;
-            console.log("particle",particle.label, "record id:",particle_record_id)
+            // console.log("particle",particle.label, "record id:",particle_record_id)
             let focused_nodes = this.staged_nodes;
             
             let present_node = []
@@ -579,6 +617,7 @@ class StateStageLocal extends StageState {
             // Transform all particles from the focused nodes. (The method will handle if they're misplaced or already present)
 
             // Transform the focused one
+            console.log("focused record id:", focused_nodes['focused'][0].record_id)
             let focused_node = this.transform_particle_to_local(focused_nodes['focused'][0].record_id, 'focused');
             console.log("focused created:", focused_node)
             // Transform the neighbours
@@ -663,7 +702,7 @@ class StateStageLocal extends StageState {
         if(this.is_particle_present(record_id).is_present){
             
             this.move_particle_if_misplaced(record_id, place_in_stage);
-            console.log("particle already present, do not trasnform, return!");
+            console.log("Transform particle to local / Transform particle: Particle "+get_single_node_anywhere(record_id).get_label()+" already present, do not trasnform, return!");
             return;
 
         } else {
@@ -725,12 +764,13 @@ class StateStageLocal extends StageState {
             let is_misplaced = particle.userData.place_in_stage != correct_place_in_stage;
             
             if(is_misplaced == false){
-                // console.log("particle is not misplaced, return!");
+                console.log("particle is not misplaced, return!");
                 return;
             } 
             else{
                 // Set the correct place in the particles userData
                 particle.userData.place_in_stage = correct_place_in_stage;
+                console.log("moved particle"+ particle.userData.db_node.semantic_id+" to correct place: ", correct_place_in_stage);
 
             }
 
@@ -1287,6 +1327,7 @@ class StateStageGlobal extends StageState {
         // this.node_target_perception = 120;
         this.node_target_perception = this.set_node_target_perception();
         this.timeline_target_perception = 60;
+        this.label = 'global'
         
         this.targets = []; // Targets for the global stage
         this.screen_orientation = context.context.get_screen_orientation();
@@ -1371,12 +1412,14 @@ class StateStageGlobal extends StageState {
 
         // Get a random free particle
         let free_particles = this.context.viz_particles.filter(particle => particle.state.get_label() == "free");
+       console.log("free particles: ", free_particles.length);
         let new_particle = free_particles[parseInt(random(free_particles.length))];
+        console.log("got random free particle", new_particle);
         // Get a random free particle
         // let new_particle = free_particle;
 
         // change the particle's state to local
-        new_particle.state.unlock_state();
+        // new_particle.state.unlock_state();
         new_particle.set_state("global");
         new_particle.state.set_place_in_stage(place_in_stage);
 
@@ -1403,6 +1446,7 @@ class StateStageGlobal extends StageState {
         return new_particle;
         
     }
+
     // To be called during update. If there are db node target without a particle, call a particle and cross reference in the target and the particle, changin its state to global_screen.
     call_node_particles(){
 
